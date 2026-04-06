@@ -1,5 +1,5 @@
 """
-Hebbian Link Management for the Unified Memory System.
+Hebbian Link Management for the Mnemoria cognitive memory system.
 
 Handles:
 - Semantic link creation (embedding similarity)

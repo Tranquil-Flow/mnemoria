@@ -1,5 +1,5 @@
 """
-Retrieval Pipeline for the Unified Memory System.
+Retrieval Pipeline for the Mnemoria cognitive memory system.
 
 4-signal fusion:
   1. Embedding cosine similarity (semantic)
@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 import numpy as np
 
 from mnemoria.types import MemoryFact, ScoredFact, FactType, METABOLIC_RATES
-from mnemoria.config import UnifiedMemoryConfig
+from mnemoria.config import MnemoriaConfig
 from mnemoria.links import cosine_similarity, build_link_map_and_embeddings
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ def score_candidates(
     query_embedding: Optional[np.ndarray],
     query: str,
     now: float,
-    cfg: UnifiedMemoryConfig,
+    cfg: MnemoriaConfig,
     scope: Optional[str] = None,
 ) -> List[ScoredFact]:
     """Score all candidate facts using ACT-R activation + embedding similarity.
@@ -197,7 +197,7 @@ def fts5_search(
 def apply_rrf_fusion(
     scored: List[ScoredFact],
     fts5_scores: Dict[str, float],
-    cfg: UnifiedMemoryConfig,
+    cfg: MnemoriaConfig,
 ) -> None:
     """Apply Score-weighted Reciprocal Rank Fusion between activation and BM25.
 
@@ -241,7 +241,7 @@ def apply_rrf_fusion(
 def apply_qvalue_reranking(
     scored: List[ScoredFact],
     qvalue_store,
-    cfg: UnifiedMemoryConfig,
+    cfg: MnemoriaConfig,
 ) -> None:
     """Phase B: Blend activation scores with learned Q-values.
 
@@ -334,7 +334,7 @@ def apply_dampening(
     conn: sqlite3.Connection,
     scored: List[ScoredFact],
     query: str,
-    cfg: UnifiedMemoryConfig,
+    cfg: MnemoriaConfig,
 ) -> List[ScoredFact]:
     """Post-scoring dampening pipeline (from Ori-Mnemos).
 
@@ -432,7 +432,7 @@ def apply_dampening(
 def apply_ips_debiasing(
     scored: List[ScoredFact],
     conn: sqlite3.Connection,
-    cfg: "UnifiedMemoryConfig",
+    cfg: "MnemoriaConfig",
 ) -> None:
     """Inverse Propensity Scoring (IPS) debiasing pass.
 

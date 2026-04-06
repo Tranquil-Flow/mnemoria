@@ -1,5 +1,5 @@
 """
-Conversation Ingestion for the Unified Memory System.
+Conversation Ingestion for the Mnemoria cognitive memory system.
 
 Automatically extracts factual claims from conversation turns and stores
 them as typed facts. This is the "perception" layer — converting raw

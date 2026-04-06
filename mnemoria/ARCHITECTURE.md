@@ -1,8 +1,8 @@
-# Unified Memory System — Architecture
+# Mnemoria cognitive memory system — Architecture
 
 ## Overview
 
-The Unified Memory System merges three memory architectures into a single
+The Mnemoria cognitive memory system merges three memory architectures into a single
 engine: cognitive science (ACT-R), structured knowledge management (typed facts),
 and self-optimizing retrieval (Ori-Mnemos). It exceeds all three individually.
 
@@ -156,9 +156,9 @@ Post-scoring: RRF → Dampening → IPS → Q-value (UCB-Tuned) → Intent boost
 mnemoria/               4,086 lines
 ├── __init__.py               Package init
 ├── types.py                  FactType, MemoryFact, ScoredFact, parse_notation
-├── config.py                 UnifiedMemoryConfig (50+ parameters)
+├── config.py                 MnemoriaConfig (50+ parameters)
 ├── schema.py                 SQLite DDL (6 tables, FTS5, triggers, views)
-├── store.py                  UnifiedMemoryStore (main engine)
+├── store.py                  MnemoriaStore (main engine)
 ├── retrieval.py              Scoring pipeline, dampening, Q-value, IPS
 ├── links.py                  Hebbian (NPMI, GloVe, Ebbinghaus, homeostasis)
 ├── lifecycle.py              Tarjan bridge detection + protection
@@ -188,7 +188,7 @@ tests/mnemoria/         2,736 lines, 117 tests
 
 ## Configuration
 
-All parameters in `UnifiedMemoryConfig`. Key defaults:
+All parameters in `MnemoriaConfig`. Key defaults:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|

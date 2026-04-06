@@ -1,5 +1,5 @@
 """
-Query Intent Classification for the Unified Memory System.
+Query Intent Classification for the Mnemoria cognitive memory system.
 
 Classifies queries into intent types and shifts retrieval signal weights
 accordingly. Ported from Ori-Mnemos classify.ts.

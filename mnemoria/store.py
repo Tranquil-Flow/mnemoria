@@ -1,15 +1,15 @@
 """
-UnifiedMemoryStore — the main engine for the Unified Memory System.
+MnemoriaStore — the main engine for the Mnemoria cognitive memory system.
 
 Combines:
 - Cognitive memory: ACT-R activation, Hebbian links, Q-value RL, embeddings
 - Structured memory: typed facts (C/D/V/?/✓/~), scopes, supersession, FTS5, gauge
 
 Usage:
-    from mnemoria.store import UnifiedMemoryStore
-    from mnemoria.config import UnifiedMemoryConfig
+    from mnemoria.store import MnemoriaStore
+    from mnemoria.config import MnemoriaConfig
 
-    store = UnifiedMemoryStore(UnifiedMemoryConfig.balanced())
+    store = MnemoriaStore(MnemoriaConfig.balanced())
     fact_id = store.store("The API uses JWT tokens", fact_type="D", target="auth")
     results = store.recall("What authentication does the API use?")
 """
@@ -32,7 +32,7 @@ from mnemoria.types import (
     METABOLIC_RATES, FACT_TYPE_FROM_NOTATION,
     parse_notation,
 )
-from mnemoria.config import UnifiedMemoryConfig
+from mnemoria.config import MnemoriaConfig
 from mnemoria.schema import get_connection
 from mnemoria import links as link_ops
 from mnemoria.links import cosine_similarity
@@ -45,7 +45,7 @@ from mnemoria.retrieval import (
 logger = logging.getLogger(__name__)
 
 
-class UnifiedMemoryStore:
+class MnemoriaStore:
     """
     Unified memory engine combining cognitive + structured memory.
 
@@ -62,10 +62,10 @@ class UnifiedMemoryStore:
 
     def __init__(
         self,
-        config: Optional[UnifiedMemoryConfig] = None,
+        config: Optional[MnemoriaConfig] = None,
         db_path: Optional[str] = None,
     ):
-        self._config = config or UnifiedMemoryConfig.balanced()
+        self._config = config or MnemoriaConfig.balanced()
         self._conn = get_connection(db_path or self._config.db_path)
 
         # Lazy-load embedding provider
@@ -106,10 +106,10 @@ class UnifiedMemoryStore:
             except ImportError:
                 logger.warning("QValueStore not available — Q-value reranking disabled")
 
-        logger.info(f"UnifiedMemoryStore initialized: db={db_path or self._config.db_path}")
+        logger.info(f"MnemoriaStore initialized: db={db_path or self._config.db_path}")
 
     @property
-    def config(self) -> UnifiedMemoryConfig:
+    def config(self) -> MnemoriaConfig:
         return self._config
 
     @property

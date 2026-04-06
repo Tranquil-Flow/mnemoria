@@ -14,7 +14,7 @@ from typing import Optional
 
 
 @dataclass
-class UnifiedMemoryConfig:
+class MnemoriaConfig:
     """All tunable parameters for the unified memory system.
 
     Fields inherited from CognitiveMemoryConfig are reproduced verbatim so
@@ -255,19 +255,19 @@ class UnifiedMemoryConfig:
     # ------------------------------------------------------------------
 
     @classmethod
-    def balanced(cls) -> "UnifiedMemoryConfig":
+    def balanced(cls) -> "MnemoriaConfig":
         """Default balanced profile — all Phase-1 features on, later phases off."""
         return cls()  # All defaults
 
     @classmethod
-    def from_profile(cls, profile: str) -> "UnifiedMemoryConfig":
+    def from_profile(cls, profile: str) -> "MnemoriaConfig":
         """Create a config from a named profile.
 
         Available profiles
         ------------------
         balanced : sensible defaults, Phase-1 unified features enabled.
         """
-        profiles: dict[str, "UnifiedMemoryConfig"] = {
+        profiles: dict[str, "MnemoriaConfig"] = {
             "balanced": cls.balanced(),
         }
         if profile not in profiles:

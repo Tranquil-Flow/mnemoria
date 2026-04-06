@@ -1,5 +1,5 @@
 """
-Lifecycle management for the Unified Memory System.
+Lifecycle management for the Mnemoria cognitive memory system.
 
 Provides:
   find_articulation_points(conn) - Tarjan's algorithm to find bridge nodes

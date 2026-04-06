@@ -5,18 +5,18 @@ import os
 
 def test_imports():
     """Test that all key imports work."""
-    from mnemoria import FactType, MemoryFact, ScoredFact, UnifiedMemoryConfig, UnifiedMemoryStore
+    from mnemoria import FactType, MemoryFact, ScoredFact, MnemoriaConfig, MnemoriaStore
     assert FactType is not None
     assert MemoryFact is not None
     assert ScoredFact is not None
-    assert UnifiedMemoryConfig is not None
-    assert UnifiedMemoryStore is not None
+    assert MnemoriaConfig is not None
+    assert MnemoriaStore is not None
     print("  OK: imports work")
 
 def test_default_config():
-    """Test UnifiedMemoryConfig can be instantiated."""
-    from mnemoria.config import UnifiedMemoryConfig
-    cfg = UnifiedMemoryConfig()
+    """Test MnemoriaConfig can be instantiated."""
+    from mnemoria.config import MnemoriaConfig
+    cfg = MnemoriaConfig()
     assert cfg is not None
     assert hasattr(cfg, 'd')
     assert hasattr(cfg, 'top_k')
@@ -24,14 +24,14 @@ def test_default_config():
 
 def test_store_recall_cycle():
     """Test store and recall cycle with default config."""
-    from mnemoria import UnifiedMemoryStore, UnifiedMemoryConfig
+    from mnemoria import MnemoriaStore, MnemoriaConfig
 
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "test.db")
-        cfg = UnifiedMemoryConfig.balanced()
+        cfg = MnemoriaConfig.balanced()
         cfg.db_path = db_path
 
-        store = UnifiedMemoryStore(cfg)
+        store = MnemoriaStore(cfg)
         assert store is not None
 
         # Store a fact
@@ -47,8 +47,8 @@ def test_store_recall_cycle():
 
 def test_balanced_preset():
     """Test the balanced() preset config."""
-    from mnemoria.config import UnifiedMemoryConfig
-    cfg = UnifiedMemoryConfig.balanced()
+    from mnemoria.config import MnemoriaConfig
+    cfg = MnemoriaConfig.balanced()
     assert cfg.d == 0.3
     assert cfg.w_semantic == 0.5
     print("  OK: balanced preset works")
