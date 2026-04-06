@@ -1,0 +1,32 @@
+[project]
+name = "mnemoria"
+version = "0.1.0"
+description = "Cognitive memory system for AI agents — ACT-R activation, typed facts, Hebbian links, RL reranking"
+readme = "README.md"
+license = {text = "AGPL-3.0-or-later"}
+requires-python = ">=3.10"
+authors = [{name = "Tranquil-Flow"}]
+dependencies = ["numpy>=1.24"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/TranquilFlow/mnemoria"
+Repository = "https://github.com/TranquilFlow/mnemoria"
+Documentation = "https://github.com/TranquilFlow/mnemoria#readme"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["mnemoria/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mnemoria/"]
