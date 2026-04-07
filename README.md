@@ -44,6 +44,11 @@ Note: in constrained containers, TF-IDF fallback is expected and benchmark resul
 If you are moving from Honcho or another external memory provider, see:
 - `MIGRATING_FROM_HONCHO.md`
 
+## Acknowledgements
+
+If you want the provenance of ideas and inspirations, see:
+- `ACKNOWLEDGEMENTS.md`
+
 ## License
 
 AGPL-3.0-or-later — see LICENSE file or <https://www.gnu.org/licenses/agpl-3.0.html>
