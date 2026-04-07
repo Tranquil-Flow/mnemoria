@@ -419,7 +419,14 @@ class MnemoriaStore:
         apply_ips_debiasing(scored, self._conn, self._config)
         scored.sort(key=lambda s: s.score, reverse=True)
 
-        results = scored[:top_k]
+        # Diversify the final slate to avoid near-duplicate cluster domination.
+        # This especially helps multi-needle queries where top-k should cover
+        # distinct relevant facets, not five paraphrases of the same one.
+        if top_k > 1:
+            from mnemoria.retrieval import diversify_results
+            results = diversify_results(scored, top_k=top_k)
+        else:
+            results = scored[:top_k]
 
         # Update access stats
         self._update_access_stats(results, now)
