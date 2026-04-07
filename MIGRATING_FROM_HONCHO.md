@@ -5,8 +5,8 @@ This guide is for users moving an existing hermes-agent setup from Honcho-backed
 Status today:
 - Mnemoria is released as a standalone Python package.
 - The hermes-agent Mnemoria plugin is prepared on a separate PR branch and may not be merged yet.
-- There is currently no fully automated Honcho -> Mnemoria importer in this standalone repo.
-- Migration today is therefore a careful cutover, with optional manual seeding of important memories.
+- A standalone Honcho -> Mnemoria migration helper now exists in this repo.
+- The default migration path imports higher-signal Honcho conclusions first, with optional raw message import.
 
 ## 1. Preserve your current setup
 
@@ -39,7 +39,41 @@ pip install 'mnemoria[embeddings]'
 
 This gives materially better semantic recall than TF-IDF fallback.
 
-## 3. Decide your cutover mode
+## 3. Optional: import Honcho memory into Mnemoria first
+
+The migration helper lives at:
+- `mnemoria/migrate.py`
+
+Recommended high-signal import (conclusions only):
+
+```bash
+python -m mnemoria.migrate
+```
+
+If your Honcho config lives somewhere custom:
+
+```bash
+python -m mnemoria.migrate --honcho-config ~/.hermes/honcho.json
+```
+
+If your user peer is not discoverable from config:
+
+```bash
+python -m mnemoria.migrate --user-peer <your-peer-name>
+```
+
+If you also want to bring over raw user-authored Honcho session messages:
+
+```bash
+python -m mnemoria.migrate --include-messages
+```
+
+Notes:
+- default import is intentionally conservative: AI conclusions about the user are the highest-signal Honcho memory
+- `--include-messages` imports raw user messages too, which can be useful but noisier
+- assistant-authored messages are excluded by default
+
+## 4. Decide your cutover mode
 
 There are two realistic paths.
 
@@ -64,7 +98,7 @@ Good candidates:
 - environment conventions
 - safety-critical rules
 
-## 4. Switch hermes-agent to Mnemoria
+## 5. Switch hermes-agent to Mnemoria
 
 Once the Mnemoria plugin branch is installed or merged into your local hermes-agent build, set the provider appropriately.
 
@@ -83,7 +117,7 @@ export HERMES_MNEMORIA_DB=~/.hermes/mnemoria.db
 Plugin default DB path is:
 - `~/.hermes/mnemoria.db`
 
-## 5. Disable Honcho-backed provider
+## 6. Disable Honcho-backed provider
 
 If your current config points to Honcho, clear or replace it when switching to Mnemoria.
 
@@ -94,7 +128,7 @@ Typical intent:
 - stop using `honcho`
 - enable `mnemoria` once available in your local plugin-enabled build
 
-## 6. Verify the plugin is actually available
+## 7. Verify the plugin is actually available
 
 Minimal Python smoke check inside your hermes-agent checkout:
 
@@ -112,9 +146,9 @@ If it is `False`, check:
 - plugin branch is actually checked out / merged in your local hermes-agent
 - import errors from optional dependencies
 
-## 7. Seed important memories manually (recommended)
+## 8. Seed important memories manually (recommended)
 
-Until a first-class Honcho importer exists, manually seed important facts into Mnemoria.
+Even with the Honcho importer, it is still wise to manually seed or verify your most important facts in Mnemoria.
 
 Use Mnemoria’s typed facts where possible:
 
@@ -125,7 +159,7 @@ store.store("D[memory]: migrate from Honcho to Mnemoria for local-first memory")
 store.store("V[user.email]: tranquil_flow@protonmail.com")
 ```
 
-## 8. Validate real behavior after cutover
+## 9. Validate real behavior after cutover
 
 After switching, verify actual memory usefulness instead of only checking imports.
 
@@ -135,7 +169,7 @@ Suggested checks:
 - verify stable preferences/constraints show up correctly
 - verify DB file exists and grows
 
-## 9. Rollback plan
+## 10. Rollback plan
 
 If the cutover feels wrong, restore your previous config:
 
@@ -146,9 +180,10 @@ cp ~/.hermes/config.yaml.bak ~/.hermes/config.yaml
 Then switch back to your previous provider.
 
 ## Future improvement
-
-A proper Honcho -> Mnemoria migration/import tool would still be valuable.
-The right version should:
-- preserve high-value facts, not blindly dump everything
-- map stable profile/preferences/constraints into typed Mnemoria facts
-- avoid importing noisy or low-signal material
++
++The current importer is intentionally conservative.
++Useful future upgrades would be:
++- map imported material into typed Mnemoria facts more intelligently
++- distinguish preferences / constraints / decisions automatically
++- optionally import only recent or high-confidence Honcho material
++- provide a dry-run / preview mode before writing to the database
