@@ -11,13 +11,21 @@ pip install mnemoria
 ## Quick Start
 
 ```python
-from mnemoria.store import UnifiedMemoryStore
-from mnemoria.config import UnifiedMemoryConfig
+from mnemoria.store import MnemoriaStore
+from mnemoria.config import MnemoriaConfig
 
-store = UnifiedMemoryStore(UnifiedMemoryConfig.balanced())
+store = MnemoriaStore(MnemoriaConfig.balanced())
 store.store("V[api.url]: https://example.com")
 results = store.recall("What is the API URL?")
 ```
+
+For better semantic recall on a real machine, install the embeddings extra:
+
+```bash
+pip install 'mnemoria[embeddings]'
+```
+
+Note: in constrained containers, TF-IDF fallback is expected and benchmark results may be lower than on a local machine with real embeddings.
 
 ## Features
 

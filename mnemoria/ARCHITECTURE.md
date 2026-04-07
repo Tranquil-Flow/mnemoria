@@ -153,24 +153,27 @@ Post-scoring: RRF → Dampening → IPS → Q-value (UCB-Tuned) → Intent boost
 ## File Structure
 
 ```
-mnemoria/               4,086 lines
-├── __init__.py               Package init
+mnemoria/
+├── __init__.py               Package exports + __version__
 ├── types.py                  FactType, MemoryFact, ScoredFact, parse_notation
-├── config.py                 MnemoriaConfig (50+ parameters)
-├── schema.py                 SQLite DDL (6 tables, FTS5, triggers, views)
-├── store.py                  MnemoriaStore (main engine)
-├── retrieval.py              Scoring pipeline, dampening, Q-value, IPS
-├── links.py                  Hebbian (NPMI, GloVe, Ebbinghaus, homeostasis)
-├── lifecycle.py              Tarjan bridge detection + protection
-├── intent.py                 6-type query intent classifier (30+ patterns)
+├── config.py                 MnemoriaConfig tunables and profiles
+├── schema.py                 SQLite DDL (tables, FTS5, triggers, views)
+├── store.py                  MnemoriaStore main API and lifecycle wiring
+├── retrieval.py              Scoring pipeline, dampening, Q-value, IPS, fusion
+├── links.py                  Semantic, keyword, and temporal adjacency links
+├── lifecycle.py              Scope management and graph protection helpers
+├── intent.py                 Query intent classification
 ├── bandit.py                 LinUCB bandits + session reward tracking
 ├── ingestion.py              Fact extraction + semantic dedup + memorability
-├── migrate.py                Migration from MEMORY.md/USER.md/legacy DBs
-├── benchmark_adapter.py      BenchmarkableStore wrapper
+├── embeddings.py             sentence-transformers / TF-IDF / provider fallback
+├── encoding.py               Content encoding helpers
+├── qvalue_store.py           SQLite-backed Q-value store
+├── export.py                 Training/export helpers (currently standalone)
 └── ARCHITECTURE.md           This file
 
-tools/mnemoria_tool.py  795 lines, 8 agent tools
-tests/mnemoria/         2,736 lines, 117 tests
+tests/
+├── test_basic.py             smoke tests
+└── test_benchmark_regressions.py  regression tests for benchmark-driven fixes
 ```
 
 ## Agent Tools
