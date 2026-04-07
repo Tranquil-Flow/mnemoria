@@ -31,7 +31,7 @@ class MnemoriaConfig:
     w_semantic: float = 0.5
     """Weight of cosine similarity in activation score."""
 
-    w_importance: float = 0.4
+    w_importance: float = 0.7
     """Weight of importance score in activation."""
 
     hebbian_learning_rate: float = 0.12

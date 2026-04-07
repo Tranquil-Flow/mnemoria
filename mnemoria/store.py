@@ -379,9 +379,10 @@ class MnemoriaStore:
             # 1. Strong FTS5 signal exists (clear keyword match) — let it rescue
             # 2. Typed facts exist and activation top-2 gap is small
             if not use_rrf and fts5_scores:
-                # Case 1: FTS5 has a strong match (any score > 0.3 is meaningful)
+                # Case 1: FTS5 has a meaningful match (threshold lowered from 0.3
+                # to 0.15 — keyword-heavy queries need lighter touch to trigger RRF)
                 max_fts5 = max(fts5_scores.values())
-                if max_fts5 > 0.3:
+                if max_fts5 > 0.15:
                     use_rrf = True
                 # Case 2: Typed facts + tight activation scores
                 else:
@@ -701,6 +702,88 @@ class MnemoriaStore:
             "used_chars": gauge_row["used_chars"] if gauge_row else 0,
             "max_chars": gauge_row["max_chars"] if gauge_row else 0,
         }
+
+    def get_system_prompt_facts(
+        self,
+        session_id: Optional[str] = None,
+        max_facts: int = 20,
+    ) -> List[MemoryFact]:
+        """Return facts that should always be present in the system prompt.
+
+        These are identity-critical, pinned, or high-importance facts that
+        survive model switches and session changes — ensuring the agent always
+        has its essential context regardless of retrieval query quality.
+
+        Includes:
+        - C (constraint) type facts — hard rules the agent must follow
+        - D (decision) type facts — past decisions that bind future behavior
+        - Pinned facts — explicitly marked as always-relevant by the user
+        - High-importance facts (importance >= 0.8) — critical value statements
+        - identity/self-target facts — facts about who the agent is
+
+        Returns up to max_facts ordered by: pinned first, then by type
+        precedence (C > D > identity > high-importance), then by activation.
+        """
+        try:
+            # Core always-relevant: constraints (C) and decisions (D)
+            rows = self._conn.execute(
+                """
+                SELECT * FROM um_facts
+                WHERE status = 'active'
+                  AND type IN ('C', 'D')
+                ORDER BY
+                    CASE type WHEN 'C' THEN 0 ELSE 1 END,
+                    activation DESC
+                LIMIT ?
+                """,
+                (max_facts,),
+            ).fetchall()
+
+            # High-importance value facts (importance >= 0.8)
+            if len(rows) < max_facts:
+                extra_rows = self._conn.execute(
+                    """
+                    SELECT * FROM um_facts
+                    WHERE status = 'active'
+                      AND type = 'V'
+                      AND (importance IS NULL OR importance >= 0.8)
+                    ORDER BY activation DESC
+                    LIMIT ?
+                    """,
+                    (max_facts - len(rows),),
+                ).fetchall()
+                rows = list(rows) + extra_rows
+
+            # identity / self-target facts
+            if len(rows) < max_facts:
+                extra_rows = self._conn.execute(
+                    """
+                    SELECT * FROM um_facts
+                    WHERE status = 'active'
+                      AND (target = 'identity' OR target = 'self'
+                           OR target LIKE 'identity.%' OR target LIKE 'self.%')
+                    ORDER BY activation DESC
+                    LIMIT ?
+                    """,
+                    (max_facts - len(rows),),
+                ).fetchall()
+                rows = list(rows) + extra_rows
+
+            facts = []
+            for r in rows:
+                rd = dict(r)
+                # Map DB column 'type' (string) → dataclass field 'fact_type' (FactType enum)
+                type_str = rd.pop("type")
+                rd["fact_type"] = FactType(type_str) if type_str else FactType.VALUE
+                # importance may be None from DB — default to 0.5
+                if rd.get("importance") is None:
+                    rd["importance"] = 0.5
+                facts.append(MemoryFact(**rd))
+            return facts
+
+        except Exception as exc:
+            logger.warning("get_system_prompt_facts failed: %s", exc)
+            return []
 
     def reset(self) -> None:
         """Clear all stored data. Used between benchmark runs."""
