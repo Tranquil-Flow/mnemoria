@@ -301,6 +301,12 @@ class MnemoriaStore:
                     min_shared=self._config.keyword_link_min_shared,
                     max_recent=self._config.keyword_link_max_recent,
                 )
+            if self._config.enable_temporal_links:
+                link_ops.create_temporal_links(
+                    self._conn, fact_id, now, scope_id,
+                    base_strength=self._config.temporal_link_strength,
+                    max_recent=self._config.temporal_link_max_recent,
+                )
             self._conn.commit()
 
         # Gauge pressure check

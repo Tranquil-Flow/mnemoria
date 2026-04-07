@@ -65,6 +65,17 @@ class MnemoriaConfig:
     keyword_link_max_recent: int = 50
     """Maximum number of recent memories to check for keyword overlap."""
 
+    enable_temporal_links: bool = True
+    """Create weak adjacency links between nearby sequential memories in the same scope.
+    This preserves local conversational/topic coherence and helps bridge evidence facts
+    to nearby canonical facts stored moments earlier."""
+
+    temporal_link_strength: float = 0.28
+    """Base strength for temporal adjacency links."""
+
+    temporal_link_max_recent: int = 4
+    """How many recent memories to link to when storing a new fact."""
+
     prune_threshold: float = 0.01
     """Activation below which to prune archived memories."""
 

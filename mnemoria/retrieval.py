@@ -202,6 +202,10 @@ def score_candidates(
         if query_lower.startswith('who ') and re.search(r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b', text):
             answer_shape_boost += 0.35
 
+        # "Why ...?" questions are often answered by causal language.
+        if query_lower.startswith('why ') and re.search(r'\b(because|due to|caused by|reason|since)\b', text_lower):
+            answer_shape_boost += 0.35
+
         # If the query asks for a value/setting, prefer facts containing concrete values
         if re.search(r'\b(port|version|ttl|size|timeout|limit|rate|retention|window|days|hours|minutes|pool)\b', query_lower):
             if re.search(r'\b\d+[\w./-]*\b', text):
@@ -497,6 +501,10 @@ def apply_dampening(
             for item in scored:
                 degree = link_counts.get(item.fact.id, 0)
                 if degree > p90:
+                    # Do not punish facts that are highly relevant to the current query.
+                    # Hub dampening is for generic over-linked memories, not strong matches.
+                    if item.components.get('bm25_score', 0.0) > 1.0 or item.components.get('spreading', 0.0) > 0.15:
+                        continue
                     ratio = (degree - p90) / (max_count - p90)
                     penalty = max(0.2, 1.0 - cfg.hub_dampening_max_penalty * ratio)
                     item.score *= penalty
@@ -744,7 +752,7 @@ def _hebbian_spreading(
             sim = cosine_similarity(query_embedding, emb)
             spread += link.strength * sim
 
-    return min(spread, 0.5)
+    return min(spread, 1.0)
 
 
 def _get_access_times(conn: sqlite3.Connection, fact_id: str) -> List[float]:

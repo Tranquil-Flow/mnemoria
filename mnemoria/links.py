@@ -212,6 +212,52 @@ def create_keyword_links(
     return created
 
 
+def create_temporal_links(
+    conn: sqlite3.Connection,
+    fact_id: str,
+    now: float,
+    scope_id: Optional[str],
+    base_strength: float = 0.12,
+    max_recent: int = 4,
+) -> int:
+    """Create weak adjacency links to nearby recent memories in the same scope.
+
+    This models real conversational/topic continuity: facts stored moments apart
+    are often part of the same thought cluster even when they don't share enough
+    literal keywords for lexical or semantic link creation.
+    """
+    if max_recent <= 0 or base_strength <= 0:
+        return 0
+
+    if scope_id is None:
+        rows = conn.execute(
+            "SELECT id, created_at FROM um_facts "
+            "WHERE id != ? AND status IN ('active', 'cold') AND scope_id IS NULL "
+            "ORDER BY created_at DESC LIMIT ?",
+            (fact_id, max_recent),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, created_at FROM um_facts "
+            "WHERE id != ? AND status IN ('active', 'cold') AND scope_id = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (fact_id, scope_id, max_recent),
+        ).fetchall()
+
+    created = 0
+    for idx, r in enumerate(rows):
+        age_gap = max(now - (r['created_at'] or now), 0.0)
+        # Strongest for immediate neighbors, gently decays with both recency rank
+        # and elapsed seconds.
+        strength = base_strength * (0.85 ** idx) * math.exp(-age_gap / 120.0)
+        if strength <= 0.02:
+            continue
+        _upsert_link(conn, fact_id, r['id'], strength, now, 'temporal')
+        created += 1
+
+    return created
+
+
 # ─── Link Strengthening ───────────────────────────────────────
 
 
