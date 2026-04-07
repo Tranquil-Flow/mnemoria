@@ -42,7 +42,51 @@ STOP_WORDS = frozenset({
     'him', 'her', 'his', 'them', 'their',
     'i', 'will', 'would', 'could', 'should', 'may', 'might',
     'shall', 'can', 'need', 'must',
+    # Meta / framing words that often appear in queries but not in the answer
+    'use', 'uses', 'using', 'current', 'currently', 'original',
+    'review', 'reviewed', 'analysis', 'analyze', 'analyzed',
+    'investigate', 'investigation', 'inspect', 'inspection',
+    'audit', 'audited', 'summary', 'summarize', 'summarized',
+    'result', 'results', 'recommended', 'recommendation',
+    'find', 'found', 'say', 'said', 'report', 'reported',
+    'task', 'delegated',
 })
+
+
+TOKEN_SYNONYMS = {
+    'db': {'database'},
+    'database': {'db'},
+    'auth': {'authentication'},
+    'authentication': {'auth'},
+    'payload': {'body'},
+    'body': {'payload'},
+    'tech': {'technology'},
+    'technology': {'tech'},
+    'deploy': {'deployment', 'deployments'},
+    'deployment': {'deploy', 'deployments'},
+    'deployments': {'deploy', 'deployment'},
+    'mfa': {'multi', 'factor', 'authentication'},
+}
+
+
+def _normalize_terms(text: str) -> Set[str]:
+    """Tokenize text into cleaned terms with light synonym expansion."""
+    raw_tokens = re.findall(r"[A-Za-z0-9_./-]+", text.lower())
+    terms: Set[str] = set()
+    for tok in raw_tokens:
+        cleaned = tok.strip("._-/")
+        if not cleaned:
+            continue
+        # Split dotted / underscored / hyphenated technical identifiers too
+        parts = [p for p in re.split(r"[._/-]+", cleaned) if p]
+        if not parts:
+            parts = [cleaned]
+        for part in parts:
+            if part in STOP_WORDS or len(part) <= 1:
+                continue
+            terms.add(part)
+            terms.update(TOKEN_SYNONYMS.get(part, set()))
+    return terms
 
 
 def score_candidates(
@@ -67,6 +111,7 @@ def score_candidates(
     link_map, embedding_cache = build_link_map_and_embeddings(conn, fact_ids)
 
     scored: List[ScoredFact] = []
+    query_terms = _normalize_terms(query)
     for c in candidates:
         # Get access times for this fact
         access_times = _get_access_times(conn, c["id"])
@@ -126,6 +171,43 @@ def score_candidates(
         adv_score = adversarial_score(c["content"])
         adversarial_penalty = -adv_score * 10.0 if adv_score > 0.2 else 0.0
 
+        # 6. Answer-shape heuristics
+        answer_shape_boost = 0.0
+        text = c["content"]
+        query_lower = query.lower().strip()
+        text_lower = text.lower().strip()
+
+        # Explicit typed-target match helps parsed MEMORY_SPEC facts beat generic distractors
+        target_match_boost = 0.0
+        target_terms = _normalize_terms(c.get("target") or "")
+        if query_terms and target_terms:
+            overlap = 0
+            for qt in query_terms:
+                for tt in target_terms:
+                    if qt == tt or (len(qt) >= 4 and (tt.startswith(qt) or qt.startswith(tt))):
+                        overlap += 1
+                        break
+            if overlap:
+                target_match_boost = min(0.45, 0.18 * overlap)
+
+        # Prefer factual result sentences over imperative task prompts
+        if re.match(r'^(review|analyze|investigate|inspect|summarize|audit|compare|check)\b', text_lower):
+            answer_shape_boost -= 0.35
+
+        # "Who ...?" questions are often answered by a named person
+        if query_lower.startswith('who ') and re.search(r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b', text):
+            answer_shape_boost += 0.35
+
+        # If the query asks for a value/setting, prefer facts containing concrete values
+        if re.search(r'\b(port|version|ttl|size|timeout|limit|rate|retention|window|days|hours|minutes|pool)\b', query_lower):
+            if re.search(r'\b\d+[\w./-]*\b', text):
+                answer_shape_boost += 0.18
+
+        # If the query asks for a product/engine/tool/framework/etc, prefer canonical identifiers
+        if re.search(r'\b(tool|framework|model|method|technology|engine|provider|gateway|region|algorithm|protocol|version|database|queue|grant|mode)\b', query_lower):
+            if re.search(r'\b(?:[A-Z]{2,}[A-Z0-9-]*|[A-Z][a-zA-Z]+(?:\.[A-Za-z0-9]+)?(?:\s+[A-Z][a-zA-Z0-9.+-]+)*|[A-Z][a-z]+DB)\b', text):
+                answer_shape_boost += 0.20
+
         components = {
             "base_level": base_level,
             "revival_spike": revival_spike,
@@ -133,6 +215,8 @@ def score_candidates(
             "importance_boost": importance_boost,
             "scope_boost": scope_boost,
             "adversarial_penalty": adversarial_penalty,
+            "target_match_boost": target_match_boost,
+            "answer_shape_boost": answer_shape_boost,
         }
 
         # Build MemoryFact from row
@@ -153,16 +237,14 @@ def fts5_search(
 
     Returns dict of {fact_id: bm25_rank_score}.
     """
-    tokens = [t for t in query.strip().split() if t.lower() not in STOP_WORDS and len(t) > 1]
+    tokens = sorted(_normalize_terms(query))
     if not tokens:
-        tokens = query.strip().split()[:3]
+        tokens = [t for t in re.findall(r"[A-Za-z0-9_]+", query.lower())[:3] if len(t) > 1]
     if not tokens:
         return {}
 
     def _escape(tok: str) -> str:
         escaped = tok.replace('"', '""')
-        if re.search(r'[^A-Za-z0-9_]', tok):
-            return f'"{escaped}"'
         return f"{escaped}*"
 
     fts_query = " OR ".join(_escape(t) for t in tokens)
@@ -346,11 +428,9 @@ def apply_dampening(
         return scored
 
     # ── 1. GRAVITY DAMPENING ──
-    # Strip punctuation and use prefix matching (deploy matches deployments)
+    # Strip punctuation and use prefix/synonym matching (deploy matches deployments)
     def _clean_terms(text: str) -> set:
-        import string
-        words = text.lower().translate(str.maketrans('', '', string.punctuation)).split()
-        return {w for w in words if w not in STOP_WORDS and len(w) > 1}
+        return _normalize_terms(text)
 
     def _has_overlap(terms_a: set, terms_b: set) -> bool:
         """Check if any term in A matches a term in B (prefix or exact)."""

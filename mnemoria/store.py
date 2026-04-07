@@ -720,6 +720,12 @@ class MnemoriaStore:
                 backend._num_docs = 0
                 backend._dim = 0
 
+        # Reset session-level reward tracking to prevent cross-scenario leakage
+        if self._reward_tracker is not None:
+            self._reward_tracker._last_recall_ids = []
+            self._reward_tracker._last_recall_time = 0.0
+            self._reward_tracker._recall_history.clear()
+
     # ─── Internal Helpers ────────────────────────────────────────
 
     def _get_active_facts(self, scope_id: Optional[str] = None) -> List[dict]:
