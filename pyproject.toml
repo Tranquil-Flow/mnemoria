@@ -16,10 +16,26 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+[project.optional-dependencies]
+# High-quality semantic embeddings via sentence-transformers (~80MB model download)
+embeddings = ["sentence-transformers>=2.2.0"]
+# Local embeddings via Ollama HTTP API (no Python deps, requires running ollama)
+ollama = ["httpx>=0.24.0"]
+# OpenAI embeddings API (requires OPENAI_API_KEY)
+openai = ["openai>=1.0.0"]
+# All embedding backends
+all = [
+    "sentence-transformers>=2.2.0",
+    "httpx>=0.24.0",
+    "openai>=1.0.0",
+]
+# Development dependencies
+dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
+
 [project.urls]
-Homepage = "https://github.com/TranquilFlow/mnemoria"
-Repository = "https://github.com/TranquilFlow/mnemoria"
-Documentation = "https://github.com/TranquilFlow/mnemoria#readme"
+Homepage = "https://github.com/Tranquil-Flow/mnemoria"
+Repository = "https://github.com/Tranquil-Flow/mnemoria"
+Documentation = "https://github.com/Tranquil-Flow/mnemoria#readme"
 
 [build-system]
 requires = ["hatchling"]
