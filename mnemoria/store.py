@@ -95,7 +95,7 @@ class MnemoriaStore:
         self._qvalue_store = None
         if self._config.enable_qvalue_reranking:
             try:
-                from cognitive_memory.qvalue_store import QValueStore
+                from mnemoria.qvalue_store import QValueStore
                 actual_db = db_path or self._config.db_path
                 if ":memory:" in actual_db:
                     qvalue_db = ":memory:"
@@ -120,7 +120,7 @@ class MnemoriaStore:
         """Lazy-initialize the embedding provider."""
         if not self._embedder_initialized:
             try:
-                from cognitive_memory.embeddings import EmbeddingProvider
+                from mnemoria.embeddings import EmbeddingProvider
                 self._embedder = EmbeddingProvider(model=self._config.embedding_model)
             except ImportError:
                 logger.warning("EmbeddingProvider not available — semantic search disabled")
@@ -187,7 +187,7 @@ class MnemoriaStore:
         # Auto-classify if not provided
         if category is None or importance is None:
             try:
-                from cognitive_memory.encoding import encode as encode_content
+                from mnemoria.encoding import encode as encode_content
                 auto_cat, auto_imp = encode_content(content)
                 if category is None:
                     category = auto_cat
