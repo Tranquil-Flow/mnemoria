@@ -362,23 +362,50 @@ class MnemoriaStore:
         )
 
         # FTS5/BM25 fusion — use FTS5 as a rescue signal when activation-only
-        # ranking has low confidence (top scores are very close together)
-        has_typed_facts = self._conn.execute(
-            "SELECT 1 FROM um_facts WHERE type != 'V' AND status='active' LIMIT 1"
-        ).fetchone()
+        # ranking has low confidence or there's a strong keyword match.
         use_rrf = self._config.enable_rrf_fusion
-        # Auto-enable RRF when typed facts exist (FTS5 matches target column)
-        if not use_rrf and has_typed_facts and scored:
-            # Check if top-2 scores are very close (activation can't discriminate)
-            if len(scored) >= 2:
-                gap = abs(scored[0].score - scored[1].score) if scored[0].score != 0 else 0
-                if gap < 0.5:
-                    use_rrf = True
+        fts5_scores: Dict[str, float] = {}
 
-        if use_rrf and scored:
+        if scored:
             fts5_scores = fts5_search(self._conn, query, scope_id)
-            if fts5_scores:
-                apply_rrf_fusion(scored, fts5_scores, self._config)
+
+            # Auto-enable RRF in these cases:
+            # 1. Strong FTS5 signal exists (clear keyword match) — let it rescue
+            # 2. Typed facts exist and activation top-2 gap is small
+            if not use_rrf and fts5_scores:
+                # Case 1: FTS5 has a strong match (any score > 0.3 is meaningful)
+                max_fts5 = max(fts5_scores.values())
+                if max_fts5 > 0.3:
+                    use_rrf = True
+                # Case 2: Typed facts + tight activation scores
+                else:
+                    has_typed = self._conn.execute(
+                        "SELECT 1 FROM um_facts WHERE type != 'V' AND status='active' LIMIT 1"
+                    ).fetchone()
+                    if has_typed and len(scored) >= 2:
+                        gap = abs(scored[0].score - scored[1].score) if scored[0].score != 0 else 0
+                        if gap < 0.5:
+                            use_rrf = True
+
+        if use_rrf and scored and fts5_scores:
+            apply_rrf_fusion(scored, fts5_scores, self._config)
+
+            # Strong-match override: if FTS5 has exactly one dominant match
+            # (score >> others), ensure it's ranked first. This handles cases
+            # like typed facts where target encodes semantic identity.
+            sorted_fts5 = sorted(fts5_scores.items(), key=lambda x: x[1], reverse=True)
+            if sorted_fts5 and sorted_fts5[0][1] > 0.3:
+                top_fts5_id = sorted_fts5[0][0]
+                second_fts5 = sorted_fts5[1][1] if len(sorted_fts5) > 1 else 0.0
+                # Dominant if at least 5x stronger than next match (or only match)
+                if second_fts5 == 0 or sorted_fts5[0][1] / max(second_fts5, 0.001) >= 5:
+                    # Find this fact in scored and boost it above current top
+                    for item in scored:
+                        if item.fact.id == top_fts5_id:
+                            current_max = max(s.score for s in scored)
+                            item.score = current_max + abs(current_max) * 0.5 + 0.1
+                            item.components['fts5_strong_match'] = sorted_fts5[0][1]
+                            break
 
         # Q-value reranking
         if self._config.enable_qvalue_reranking and self._qvalue_store is not None:

@@ -370,6 +370,11 @@ def apply_dampening(
         for item in scored:
             if item.score > 0.3 * max_score:
                 memory_terms = _clean_terms(item.fact.content)
+                # Include target terms — for typed facts like V[auth.mfa]: ...,
+                # the target encodes semantic identity (mfa, auth) that may not
+                # appear in content (e.g. acronym expansions).
+                if item.fact.target and item.fact.target != 'general':
+                    memory_terms |= _clean_terms(item.fact.target)
                 if not _has_overlap(query_terms, memory_terms):
                     pre = item.score
                     item.score *= cfg.gravity_dampening_factor
