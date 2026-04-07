@@ -39,6 +39,11 @@ Note: in constrained containers, TF-IDF fallback is expected and benchmark resul
 - **IPS Debiasing** — Inverse propensity scoring to counteract popularity bias
 - **PPR Exploration** — Personalized PageRank multi-hop discovery
 
+## Migration
+
+If you are moving from Honcho or another external memory provider, see:
+- `MIGRATING_FROM_HONCHO.md`
+
 ## License
 
 AGPL-3.0-or-later — see LICENSE file or <https://www.gnu.org/licenses/agpl-3.0.html>
