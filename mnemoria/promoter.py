@@ -54,9 +54,49 @@ def run_promotion_pass(conn: sqlite3.Connection, now: float, session_ttl: float 
 
     cursor = conn.cursor()
 
+    # Per-observer metric accumulators for this pass
+    retract_counts: dict[tuple[str, str], int] = {}
+    promote_counts: dict[tuple[str, str], int] = {}
+
     # -- 1. Retraction pass -----------------------------------------------
     # For each (type, target, session_id) keep only the LATEST provisional
     # row; mark all others as retracted.  We use updated_at as tie-breaker.
+    # First: collect per-observer counts before updating.
+    cursor.execute("""
+        WITH ranked AS (
+            SELECT
+                p.id,
+                p.type,
+                p.target,
+                p.session_id,
+                p.status,
+                p.updated_at,
+                p.provenance,
+                ROW_NUMBER()
+                    OVER (PARTITION BY p.type, p.target, p.session_id
+                          ORDER BY p.updated_at DESC) AS rn
+            FROM um_pending p
+            WHERE p.status = 'provisional'
+        )
+        SELECT session_id, provenance
+        FROM ranked
+        WHERE rn > 1
+    """)
+    for row in cursor.fetchall():
+        session_id = row["session_id"] or "global"
+        prov_raw = row["provenance"] or "{}"
+        try:
+            prov = json.loads(prov_raw)
+        except Exception:
+            prov = {}
+        observer = prov.get("extractor", prov.get("source", "unknown"))
+        key = (session_id, observer)
+        retract_counts[key] = retract_counts.get(key, 0) + 1
+
+    # Now perform the actual retraction
+    # Use the count from the first CTE query (which we already collected)
+    # instead of cursor.rowcount (which returns -1 for CTE UPDATEs in SQLite)
+    retraction_target_count = sum(retract_counts.values())
     cursor.execute("""
         WITH ranked AS (
             SELECT
@@ -78,12 +118,19 @@ def run_promotion_pass(conn: sqlite3.Connection, now: float, session_ttl: float 
             SELECT id FROM ranked WHERE rn > 1
         )
     """)
-    stats["retracted"] = cursor.rowcount
+    # cursor.rowcount returns -1 for CTE UPDATE, so use our pre-computed count
+    stats["retracted"] = retraction_target_count
 
     # -- 2. Promote observed + user_stated immediately ----------------------
     for source in ("observed", "user_stated"):
-        _promote_by_source(cursor, conn, source, now)
-        stats[f"{source}_promoted"] = cursor.rowcount
+        counts = _promote_by_source(cursor, conn, source, now)
+        total_promoted = 0
+        for (sid, obs), cnt in counts.items():
+            promote_counts[(sid, obs)] = promote_counts.get((sid, obs), 0) + cnt
+            total_promoted += cnt
+        # cursor.rowcount is unreliable after statements in _promote_by_source,
+        # so use the count we collected directly from the function
+        stats[f"{source}_promoted"] = total_promoted
 
     # -- 3. Promote agent_inference only when session is TTL-expired -------
     # Find sessions that have NOT had any pending activity in the last
@@ -99,10 +146,20 @@ def run_promotion_pass(conn: sqlite3.Connection, now: float, session_ttl: float 
 
     expired_sessions = [row["session_id"] for row in cursor.fetchall()]
     for session_id in expired_sessions:
-        _promote_by_source(cursor, conn, "agent_inference", now,
+        counts = _promote_by_source(cursor, conn, "agent_inference", now,
                             extra_where="AND session_id = ?",
                             extra_args=(session_id,))
-        stats["agent_inference_promoted"] += cursor.rowcount
+        session_promoted = 0
+        for (sid, obs), cnt in counts.items():
+            promote_counts[(sid, obs)] = promote_counts.get((sid, obs), 0) + cnt
+            session_promoted += cnt
+        stats["agent_inference_promoted"] += session_promoted
+
+    # -- Emit metrics ---------------------------------------------------------
+    for (session_id, observer), count in retract_counts.items():
+        _increment_metric(conn, session_id, observer, "retract_count", count)
+    for (session_id, observer), count in promote_counts.items():
+        _increment_metric(conn, session_id, observer, "promote_count", count)
 
     conn.commit()
     return stats
@@ -115,7 +172,7 @@ def _promote_by_source(
     now: float,
     extra_where: str = "",
     extra_args: tuple = (),
-) -> None:
+) -> dict[tuple[str, str], int]:
     """
     Promote all provisional rows of the given source to um_facts.
 
@@ -133,9 +190,10 @@ def _promote_by_source(
 
     rows = cursor.fetchall()
     if not rows:
-        return
+        return {}
 
     promoted_fact_ids = []
+    promote_counts: dict[tuple[str, str], int] = {}
 
     for row in rows:
         pending_id = row["id"]
@@ -191,4 +249,94 @@ def _promote_by_source(
 
         promoted_fact_ids.append(new_fact_id)
 
+        # Track per-observer promote count
+        observer = provenance.get("extractor", provenance.get("source", "unknown"))
+        key = (session_id or "global", observer)
+        promote_counts[key] = promote_counts.get(key, 0) + 1
+
     # Note: conn.commit() is called by the caller (run_promotion_pass)
+    return promote_counts
+
+
+# ─── Metrics ──────────────────────────────────────────────────────────────────
+
+def _emit_metrics(
+    conn: sqlite3.Connection,
+    cursor: sqlite3.Cursor,
+    stats: dict,
+    now: float,
+) -> None:
+    """Emit promote_count and retract_count to um_metrics.
+
+    Extracts observer name from provenance of promoted/retracted pending
+    facts and increments per-(session_id, observer) counters.
+    """
+    # -- Retracted facts: per-observer counts --------------------------------
+    # Query facts that were just marked retracted in this pass
+    retracted_rows = cursor.execute("""
+        SELECT session_id, provenance
+        FROM um_pending
+        WHERE status = 'retracted'
+    """).fetchall()
+
+    retract_counts: dict[tuple[str, str], int] = {}
+    for row in retracted_rows:
+        session_id = row["session_id"] or "global"
+        prov_raw = row["provenance"] or "{}"
+        try:
+            prov = json.loads(prov_raw)
+        except Exception:
+            prov = {}
+        observer = prov.get("extractor", prov.get("source", "unknown"))
+        key = (session_id, observer)
+        retract_counts[key] = retract_counts.get(key, 0) + 1
+
+    for (session_id, observer), count in retract_counts.items():
+        _increment_metric(conn, session_id, observer, "retract_count", count)
+
+    # -- Promoted facts: per-observer counts --------------------------------
+    promoted_rows = cursor.execute("""
+        SELECT session_id, provenance
+        FROM um_pending
+        WHERE status = 'promoted'
+    """).fetchall()
+
+    promote_counts: dict[tuple[str, str], int] = {}
+    for row in promoted_rows:
+        session_id = row["session_id"] or "global"
+        prov_raw = row["provenance"] or "{}"
+        try:
+            prov = json.loads(prov_raw)
+        except Exception:
+            prov = {}
+        observer = prov.get("extractor", prov.get("source", "unknown"))
+        key = (session_id, observer)
+        promote_counts[key] = promote_counts.get(key, 0) + 1
+
+    for (session_id, observer), count in promote_counts.items():
+        _increment_metric(conn, session_id, observer, "promote_count", count)
+
+
+def _increment_metric(
+    conn: sqlite3.Connection,
+    session_id: str,
+    observer: str,
+    counter: str,
+    delta: int = 1,
+) -> None:
+    """Increment a counter in ``um_metrics``.
+
+    Uses INSERT ... ON CONFLICT DO UPDATE SET count = count + delta
+    so the operation is idempotent and accumulates correctly.
+    """
+    try:
+        conn.execute(
+            f"""INSERT INTO um_metrics (session_id, observer, {counter})
+                VALUES (?, ?, ?)
+                ON CONFLICT (session_id, observer) DO UPDATE
+                SET {counter} = {counter} + ?""",
+            (session_id, observer, delta, delta),
+        )
+    except sqlite3.OperationalError:
+        # Table doesn't exist yet — skip silently
+        pass

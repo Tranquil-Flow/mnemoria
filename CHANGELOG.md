@@ -4,6 +4,42 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.2.0] - 2026-04-08
+
+### Added
+
+- **Continuous rule-based extraction** — `um_pending` table stores provisional facts extracted from tool outputs and user statements. Crash-safe by construction: extraction writes to SQLite immediately, never held in-memory.
+- **`um_pending` table** — Append-only pending facts with source tracking (`observed`, `user_stated`, `agent_inference`), TTL-based session detection (10 min inactivity = session ended), and provenance JSON.
+- **Rule-based observers** — Four deterministic extractors:
+  - `PytestObserver`: Detects failing pytest runs, emits `V` facts about failures
+  - `GitObserver`: Detects rejected pushes and non-default commit authors
+  - `FileObserver`: Detects repeated config file reads, emits facts about config locations
+  - `UserStatementObserver`: Detects explicit preferences, constraints, and memory requests from user messages
+- **Promoter** — `run_promotion_pass()` moves pending → confirmed facts. `observed` and `user_stated` promote immediately. `agent_inference` waits for session TTL expiry. Within same `(type, target, session_id)` group, latest fact retracts earlier ones.
+- **Crash recovery** — `MnemoriaStore.__init__` drains pending facts from crashed prior sessions on startup. `flush_pending()` exposed for external callers.
+- **Target population fix** — `target` parameter now properly propagates through all write paths (`store()`, provider, backfill script). `scope_id` added to store.
+- **Backfill script** — `python -m mnemoria.scripts.retag_facts` interactively reassigns targets to existing `general`-targeted facts.
+- **User control surfaces** — Three MCP tools:
+  - `mcp_umemory_pending`: List pending facts by session/source/status
+  - `mcp_umemory_retract`: Retract pending facts or supersede confirmed facts
+  - `mcp_umemory_promote`: Force-promote pending facts (bypass TTL)
+- **CLI pending inspector** — `python -m mnemoria.scripts.pending` color-coded pending fact viewer with filter and action support.
+- **Hermes-agent event hook** — `observe_event()` wired into tool-result and user-message paths in hermes-agent proper. Fully backward-compatible via `hasattr` guard.
+- **Extraction mode config** — `HERMES_MEMORY_MNEMORIA_EXTRACT_MODE`: `off` (no extraction), `observed_only` (default, tool outputs + user statements only), `full` (include `agent_inference`).
+- **Telemetry** — `um_metrics` table tracks per-(session, observer) event/extract/promote/retract counts. `mcp_umemory_stats` extended with per-observer breakdown.
+- **`provenance` column on `um_facts`** — JSON field recording source, extractor, pending ID, session, and trigger event.
+- **`um_meta` table** — Schema version tracking (`schema_version = 2`).
+
+### Changed
+
+- **Promoter idempotency**: Running `run_promotion_pass()` twice in a row promotes nothing new.
+- **`get_system_prompt_facts()`**: Now strips unknown `provenance` column before constructing `MemoryFact` (backward compat for pre-v0.2.0 DBs).
+
+### Verified
+
+- **49 tests passing** — Wave 3 observers (15), Wave 4 promoter (13), Wave 8 integration (8), basic (8), migrate (3), benchmark regression (2).
+- **No benchmark regression** from v0.1.0 baseline (0.910).
+
 ## [0.1.0] - 2026-04-08
 
 ### Fixed

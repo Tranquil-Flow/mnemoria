@@ -397,6 +397,14 @@ class MnemoriaStore:
              source, now, now, provenance_json),
         )
 
+        # -- Emit metrics -------------------------------------------------------
+        # event_count: one event processed by this observer
+        # extract_count: one fact extracted by this observer
+        prov_dict = provenance or {}
+        observer_name = prov_dict.get("extractor", source)
+        self._increment_metric(session_id, observer_name, "event_count", 1)
+        self._increment_metric(session_id, observer_name, "extract_count", 1)
+
         # Increment counter and promote when threshold is reached
         self._pending_write_counter += 1
         if self._pending_write_counter >= self._promotion_every:
@@ -1080,3 +1088,30 @@ class MnemoriaStore:
                 self._conn.commit()
 
         return actions
+
+    # ─── Metrics ─────────────────────────────────────────────────────────────
+
+    def _increment_metric(
+        self,
+        session_id: str,
+        observer: str,
+        counter: str,
+        delta: int = 1,
+    ) -> None:
+        """Increment a counter in ``um_metrics``.
+
+        Uses INSERT ... ON CONFLICT DO UPDATE SET count = count + delta
+        so the operation is idempotent and accumulates correctly.
+        """
+        # Guard: skip if um_metrics table doesn't exist yet (fresh DB before init)
+        try:
+            self._conn.execute(
+                f"""INSERT INTO um_metrics (session_id, observer, {counter})
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (session_id, observer) DO UPDATE
+                    SET {counter} = {counter} + ?""",
+                (session_id, observer, delta, delta),
+            )
+        except sqlite3.OperationalError:
+            # Table doesn't exist yet — skip silently
+            pass

@@ -165,14 +165,29 @@ CREATE TABLE IF NOT EXISTS um_meta (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------- um_metrics --
+CREATE TABLE IF NOT EXISTS um_metrics (
+    session_id       TEXT    NOT NULL,
+    observer         TEXT    NOT NULL,
+    event_count      INTEGER NOT NULL DEFAULT 0,
+    extract_count    INTEGER NOT NULL DEFAULT 0,
+    promote_count    INTEGER NOT NULL DEFAULT 0,
+    retract_count    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (session_id, observer)
+);
 """
 
 
 def _migrate_to_v2(conn: sqlite3.Connection) -> None:
     """Add provenance column if missing (for existing DBs)."""
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(um_facts)")}
-    if "provenance" not in cols:
+    facts_cols = {row[1] for row in conn.execute("PRAGMA table_info(um_facts)")}
+    if "provenance" not in facts_cols:
         conn.execute("ALTER TABLE um_facts ADD COLUMN provenance TEXT")
+
+    pending_cols = {row[1] for row in conn.execute("PRAGMA table_info(um_pending)")}
+    if "provenance" not in pending_cols:
+        conn.execute("ALTER TABLE um_pending ADD COLUMN provenance TEXT")
 
 
 def init_db(conn: sqlite3.Connection) -> None:
