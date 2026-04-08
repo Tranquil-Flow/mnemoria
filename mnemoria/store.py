@@ -875,6 +875,8 @@ class MnemoriaStore:
                 # importance may be None from DB — default to 0.5
                 if rd.get("importance") is None:
                     rd["importance"] = 0.5
+                # provenance column was added in v0.2.0; strip it since MemoryFact has no field for it
+                rd.pop("provenance", None)
                 facts.append(MemoryFact(**rd))
             return facts
 
