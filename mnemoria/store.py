@@ -159,6 +159,7 @@ class MnemoriaStore:
         metadata: Optional[Dict[str, Any]] = None,
         fact_type: Optional[str] = None,
         target: Optional[str] = None,
+        scope_id: Optional[str] = None,
     ) -> str:
         """Store a new memory/fact.
 
@@ -248,15 +249,15 @@ class MnemoriaStore:
                 if old_row:
                     superseded_activation = old_row["activation"] * self._config.activation_transfer_ratio
 
-        # Resolve scope
-        scope_id = None
-        if scope and scope.lower() not in ("global", "none", ""):
-            scope_id = self._get_or_create_scope(scope, now)
+        # Resolve scope — use scope_id directly if provided, otherwise resolve from scope label
+        resolved_scope_id = scope_id
+        if resolved_scope_id is None and scope and scope.lower() not in ("global", "none", ""):
+            resolved_scope_id = self._get_or_create_scope(scope, now)
 
         # Contradiction check
         check_contradictions(
             self._conn, content, embedding, self._config.contradiction_threshold,
-            category=category, scope_id=scope_id,
+            category=category, scope_id=resolved_scope_id,
         )
 
         # Store embedding as BLOB
@@ -273,7 +274,7 @@ class MnemoriaStore:
                     ?, 0.5, 0, ?,
                     ?, ?, 'working', ?,
                     ?, ?, ?, ?)""",
-            (fact_id, content, embedding_blob, ft_enum.value, target, scope_id,
+            (fact_id, content, embedding_blob, ft_enum.value, target, resolved_scope_id,
              superseded_activation, metabolic_rate,
              importance, category, int(pinned),
              now, now, now, source_hash)
@@ -303,7 +304,7 @@ class MnemoriaStore:
                 )
             if self._config.enable_temporal_links:
                 link_ops.create_temporal_links(
-                    self._conn, fact_id, now, scope_id,
+                    self._conn, fact_id, now, resolved_scope_id,
                     base_strength=self._config.temporal_link_strength,
                     max_recent=self._config.temporal_link_max_recent,
                 )
