@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS um_facts (
     updated_at      REAL    NOT NULL,
     last_accessed   REAL    NOT NULL,
     source_hash     TEXT,
-    superseded_by   TEXT    REFERENCES um_facts(id)
+    superseded_by   TEXT    REFERENCES um_facts(id),
+    provenance      TEXT  -- JSON: source, extractor, original pending id
 );
 
 CREATE INDEX IF NOT EXISTS idx_um_facts_type        ON um_facts(type);
@@ -64,6 +65,29 @@ CREATE INDEX IF NOT EXISTS idx_um_facts_status      ON um_facts(status);
 CREATE INDEX IF NOT EXISTS idx_um_facts_updated_at  ON um_facts(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_um_facts_source_hash ON um_facts(source_hash);
 CREATE INDEX IF NOT EXISTS idx_um_facts_layer       ON um_facts(layer);
+
+-- ---------------------------------------------------------------- um_pending ---
+CREATE TABLE IF NOT EXISTS um_pending (
+    id              TEXT    PRIMARY KEY,
+    content         TEXT    NOT NULL,
+    type            TEXT    NOT NULL DEFAULT 'V',
+    target          TEXT    NOT NULL DEFAULT 'general',
+    scope_id        TEXT    REFERENCES um_scopes(id),
+    session_id      TEXT    NOT NULL,
+    source          TEXT    NOT NULL,  -- 'observed' | 'user_stated' | 'agent_inference'
+    status          TEXT    NOT NULL DEFAULT 'provisional',  -- 'provisional' | 'promoted' | 'retracted'
+    retracted_by    TEXT    REFERENCES um_pending(id),
+    promoted_to     TEXT    REFERENCES um_facts(id),
+    created_at      REAL    NOT NULL,
+    updated_at      REAL    NOT NULL,
+    provenance      TEXT  -- JSON: extractor name, event type, raw trigger
+);
+
+CREATE INDEX IF NOT EXISTS idx_um_pending_session   ON um_pending(session_id);
+CREATE INDEX IF NOT EXISTS idx_um_pending_status    ON um_pending(status);
+CREATE INDEX IF NOT EXISTS idx_um_pending_source    ON um_pending(source);
+CREATE INDEX IF NOT EXISTS idx_um_pending_target    ON um_pending(type, target, session_id);
+CREATE INDEX IF NOT EXISTS idx_um_pending_updated   ON um_pending(updated_at DESC);
 
 -- ---------------------------------------------------------------- um_links ---
 CREATE TABLE IF NOT EXISTS um_links (
@@ -135,12 +159,27 @@ CREATE VIEW IF NOT EXISTS um_hot_facts AS
     JOIN um_scopes s ON f.scope_id = s.id
     WHERE f.status = 'active'
       AND s.status = 'active';
+
+-- ---------------------------------------------------------------- um_meta ---
+CREATE TABLE IF NOT EXISTS um_meta (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
 """
+
+
+def _migrate_to_v2(conn: sqlite3.Connection) -> None:
+    """Add provenance column if missing (for existing DBs)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(um_facts)")}
+    if "provenance" not in cols:
+        conn.execute("ALTER TABLE um_facts ADD COLUMN provenance TEXT")
 
 
 def init_db(conn: sqlite3.Connection) -> None:
     """Execute SCHEMA_SQL against an existing connection. Idempotent."""
     conn.executescript(SCHEMA_SQL)
+    _migrate_to_v2(conn)
+    conn.execute("INSERT OR IGNORE INTO um_meta (key, value) VALUES ('schema_version', '2')")
     conn.commit()
 
 
