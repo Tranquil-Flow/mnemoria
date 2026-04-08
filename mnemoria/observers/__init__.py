@@ -1,0 +1,49 @@
+"""
+Rule-based observers for Mnemoria v0.2.0.
+
+Each observer watches events and produces PendingFacts for downstream processing.
+"""
+from __future__ import annotations
+
+from typing import Protocol
+
+from dataclasses import dataclass
+
+
+@dataclass
+class PendingFact:
+    content: str
+    type: str           # 'C' | 'D' | 'V'
+    target: str
+    source: str         # 'observed' | 'user_stated' | 'agent_inference'
+    provenance: dict
+
+    @property
+    def is_retraction(self) -> bool:
+        """True when this PendingFact signals a retraction of a prior provisional fact."""
+        return self.type == 'D'
+
+
+class Observer(Protocol):
+    """Protocol for rule-based event observers."""
+    name: str
+
+    def observe(self, event: dict) -> list[PendingFact]:
+        """
+        Examine an event and return zero or more PendingFacts.
+
+        Parameters
+        ----------
+        event : dict
+            Structured event with at minimum:
+            - kind: 'tool_call' | 'tool_result' | 'user_message' | 'agent_message'
+            - session_id: str
+            - timestamp: float
+            - payload: dict (kind-specific)
+
+        Returns
+        -------
+        list[PendingFact]
+            Zero or more facts extracted from the event. Empty list means no match.
+        """
+        ...

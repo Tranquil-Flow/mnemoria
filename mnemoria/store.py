@@ -34,6 +34,7 @@ from mnemoria.types import (
 )
 from mnemoria.config import MnemoriaConfig
 from mnemoria.schema import get_connection
+from mnemoria.promoter import run_promotion_pass
 from mnemoria import links as link_ops
 from mnemoria.links import cosine_similarity
 from mnemoria.retrieval import (
@@ -90,6 +91,13 @@ class MnemoriaStore:
         if self._config.enable_session_rewards:
             from mnemoria.bandit import SessionRewardTracker
             self._reward_tracker = SessionRewardTracker()
+
+        # Pending-fact write counter (triggers promotion every N writes)
+        self._pending_write_counter = 0
+        self._promotion_every = 10  # promote every N pending writes
+
+        # Drain any pending facts left from crashed prior sessions
+        run_promotion_pass(self._conn, self._now())
 
         # Q-value store
         self._qvalue_store = None
@@ -325,6 +333,94 @@ class MnemoriaStore:
             f"cat={category}, imp={importance:.2f}, scope={scope}"
         )
         return fact_id
+
+    # ─── Pending-fact write (for observers / external callers) ───
+
+    def store_pending(
+        self,
+        content: str,
+        source: str,
+        fact_type: Optional[str] = None,
+        target: Optional[str] = None,
+        scope_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        provenance: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Write a provisional fact to ``um_pending`` for later promotion.
+
+        This is the write path for facts produced by observers
+        (``observed``, ``user_stated``, ``agent_inference``).
+
+        Promotion to ``um_facts`` happens automatically every
+        ``self._promotion_every`` writes, or can be triggered manually
+        via :meth:`flush_pending`.
+
+        Parameters
+        ----------
+        content : str
+            Human-readable fact content.
+        source : str
+            One of: ``observed``, ``user_stated``, ``agent_inference``.
+        fact_type : str, optional
+            MEMORY_SPEC type letter (C/D/V/?).  Defaults to ``V``.
+        target : str, optional
+            Target namespace.  Defaults to ``general``.
+        scope_id : str, optional
+            Scope ID this fact belongs to.
+        session_id : str, optional
+            Session this fact is associated with.  Required for
+            TTL-based promotion of ``agent_inference`` facts.
+        provenance : dict, optional
+            JSON-serializable metadata about the fact's origin.
+
+        Returns
+        -------
+        str
+            The pending fact ID.
+        """
+        import json
+        import uuid as uuid_mod
+
+        now = self._now()
+        pending_id = str(uuid_mod.uuid4())
+        fact_type = fact_type or "V"
+        target = target or "general"
+        session_id = session_id or "global"
+        provenance_json = json.dumps(provenance or {})
+
+        self._conn.execute(
+            """INSERT INTO um_pending
+               (id, content, type, target, scope_id, session_id, source,
+                status, created_at, updated_at, provenance)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'provisional', ?, ?, ?)""",
+            (pending_id, content, fact_type, target, scope_id, session_id,
+             source, now, now, provenance_json),
+        )
+
+        # Increment counter and promote when threshold is reached
+        self._pending_write_counter += 1
+        if self._pending_write_counter >= self._promotion_every:
+            self._pending_write_counter = 0
+            run_promotion_pass(self._conn, now)
+
+        self._conn.commit()
+        return pending_id
+
+    def flush_pending(self) -> dict:
+        """Run a promotion pass immediately.
+
+        Promotes all eligible provisional facts in ``um_pending`` to
+        confirmed facts in ``um_facts`` according to the standard rules
+        (``observed``/``user_stated`` immediately; ``agent_inference``
+        only after session TTL expiry).
+
+        Returns
+        -------
+        dict
+            Promotion statistics (same shape as
+            :func:`mnemoria.promoter.run_promotion_pass`).
+        """
+        return run_promotion_pass(self._conn, self._now())
 
     # ─── Recall ──────────────────────────────────────────────────
 
