@@ -4,6 +4,26 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.2.1] - 2026-04-11
+
+### Added
+
+- **Event constructors** (`mnemoria/events.py`) — hermes-agnostic factories for building observer events. Any integration can use `events.user_message()`, `events.tool_result()`, etc.
+- **ErrorContextObserver** — extracts generic error lines, URLs within 3 lines of errors, and file paths within 3 lines of errors from tool output.
+- **UserContentObserver** — extracts URLs and file paths from user messages unconditionally.
+- **MemoryWriteObserver** — mirrors built-in memory writes (MEMORY.md/USER.md) as typed Mnemoria facts with content_slug-based target discrimination.
+- **DelegationObserver** — stores delegation outcomes as D[delegation] facts. Forward-compatible with upstream tool_trace support.
+- **`all_observers()`** — central registry in `mnemoria.observers` returning all 8 built-in observers.
+
+### Fixed
+
+- **`PendingFact.is_retraction`** — now uses explicit `retract` field instead of overloading `type == 'D'`. Decision-type facts are no longer incorrectly flagged as retractions.
+- **`FileObserver` session state** — `_session_file_reads` moved from module-level to instance attribute, preventing unbounded growth.
+
+### Changed
+
+- **README** — rewritten with research foundations table, feature overview, and conceptual pipeline description. Version-specific sections removed.
+
 ## [0.2.0] - 2026-04-08
 
 ### Added
