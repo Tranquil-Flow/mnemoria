@@ -17,11 +17,12 @@ class PendingFact:
     target: str
     source: str         # 'observed' | 'user_stated' | 'agent_inference'
     provenance: dict
+    retract: bool = False
 
     @property
     def is_retraction(self) -> bool:
         """True when this PendingFact signals a retraction of a prior provisional fact."""
-        return self.type == 'D'
+        return self.retract
 
 
 class Observer(Protocol):

@@ -38,8 +38,9 @@ def test_pytest_failing():
     assert len(result) == 2, f"Failing test should produce fact + retraction: {result}"
     assert result[0].source == 'observed'
     assert 'tests failing' in result[0].content
-    # Second result should be a retraction type D
-    assert result[1].type == 'D'
+    # Second result should be an explicit retraction (type V, retract=True)
+    assert result[1].type == 'V'
+    assert result[1].retract is True
 
 
 def test_pytest_retraction_emitted():
@@ -52,7 +53,8 @@ def test_pytest_retraction_emitted():
     })
     # Should be two: one fact + one retraction
     assert len(result) == 2, f"Expected 2 facts (fact + retraction): {result}"
-    assert result[1].type == 'D', f"Second should be retraction: {result[1]}"
+    assert result[1].type == 'V', f"Second should be retraction (type V): {result[1]}"
+    assert result[1].retract is True, f"Second should have retract=True: {result[1]}"
 
 
 def test_git_observer_rejected_push():
@@ -176,11 +178,27 @@ def test_pending_fact_dataclass():
 
     retraction = PendingFact(
         content="retract test",
-        type="D",
+        type="V",
         target="test_target",
         source="observed",
-        provenance={}
+        provenance={},
+        retract=True,
     )
+    assert retraction.is_retraction is True
+
+
+def test_pending_fact_retract_field():
+    """PendingFact.is_retraction uses explicit retract field, not type."""
+    from mnemoria.observers import PendingFact
+
+    # D-type fact should NOT be a retraction by default
+    decision = PendingFact(content="config at /foo", type="D", target="proj",
+                           source="observed", provenance={})
+    assert decision.is_retraction is False
+
+    # Explicit retraction
+    retraction = PendingFact(content="tests passing", type="V", target="proj",
+                             source="observed", provenance={}, retract=True)
     assert retraction.is_retraction is True
 
 

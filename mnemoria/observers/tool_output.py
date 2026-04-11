@@ -138,7 +138,7 @@ class PytestObserver:
         session_id = event.get("session_id", "")
         return PendingFact(
             content=f"tests passing in {target}",
-            type="D",
+            type="V",
             target=target,
             source="observed",
             provenance={
@@ -146,6 +146,7 @@ class PytestObserver:
                 "retracts_session": session_id,
                 "reason": "tests now failing",
             },
+            retract=True,
         )
 
 
@@ -305,14 +306,14 @@ _CONFIG_FILES = frozenset([
     ".env", ".env.local", "config.toml", "config.yaml", "config.yml",
 ])
 
-# Track reads per session to detect repetition
-_session_file_reads: dict[str, list[str]] = {}
-
-
 class FileObserver:
     """Extracts facts from file read/write tool calls."""
 
     name: str = "file"
+
+    def __init__(self) -> None:
+        # Track reads per session to detect repetition (instance-level to avoid unbounded growth)
+        self._session_file_reads: dict[str, list[str]] = {}
 
     def observe(self, event: dict) -> list[PendingFact]:
         if event.get("kind") not in ("tool_call", "tool_result"):
@@ -347,11 +348,11 @@ class FileObserver:
 
         # Record the read for repetition detection
         if event.get("kind") == "tool_call":
-            _session_file_reads.setdefault(session_id, []).append(path)
+            self._session_file_reads.setdefault(session_id, []).append(path)
 
         # Repeated config file reads → emit a fact
         if event.get("kind") == "tool_result" and self._is_config_file(path):
-            reads = _session_file_reads.get(session_id, [])
+            reads = self._session_file_reads.get(session_id, [])
             count = reads.count(path)
             if count >= 2:
                 return self._config_fact(path, session_id)
