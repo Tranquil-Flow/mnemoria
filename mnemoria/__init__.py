@@ -20,4 +20,4 @@ from mnemoria.store import MnemoriaStore
 
 __all__ = ["FactType", "MemoryFact", "ScoredFact", "MnemoriaConfig", "MnemoriaStore"]
 
-__version__ = "0.1.0"
+__version__ = "0.2.1"
