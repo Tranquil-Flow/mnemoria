@@ -75,3 +75,15 @@ dmypy.json
 *.swp
 *.swo
 *~
+
+# Internal dev artifacts
+TASKS.md
+HANDOVER.md
+WAVE5_BLOCKER.md
+docs/HANDOVER_*
+docs/ISSUE_*
+docs/WEAK_SPOTS.md
+docs/superpowers/
+debug_*.py
+verify_*.py
+.venv-*/
