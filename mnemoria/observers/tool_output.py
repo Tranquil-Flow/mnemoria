@@ -389,12 +389,3 @@ class FileObserver:
         if len(parts) >= 2:
             return parts[-2]
         return parts[-1] if parts else "project"
-
-
-# -------------------------------------------------------------------------- #
-# Convenience factory
-# -------------------------------------------------------------------------- #
-
-def all_observers() -> list[Observer]:
-    """Return every built-in observer instance."""
-    return [PytestObserver(), GitObserver(), FileObserver()]

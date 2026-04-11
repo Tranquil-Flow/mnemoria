@@ -48,3 +48,33 @@ class Observer(Protocol):
             Zero or more facts extracted from the event. Empty list means no match.
         """
         ...
+
+
+from .user_statement import UserStatementObserver
+from .user_content import UserContentObserver
+from .tool_output import PytestObserver, GitObserver, FileObserver
+from .error_context import ErrorContextObserver
+from .memory_write import MemoryWriteObserver
+from .delegation import DelegationObserver
+
+__all__ = [
+    "PendingFact", "Observer",
+    "UserStatementObserver", "UserContentObserver",
+    "PytestObserver", "GitObserver", "FileObserver",
+    "ErrorContextObserver", "MemoryWriteObserver", "DelegationObserver",
+    "all_observers",
+]
+
+
+def all_observers() -> list:
+    """Return every built-in observer instance."""
+    return [
+        UserStatementObserver(),
+        UserContentObserver(),
+        PytestObserver(),
+        GitObserver(),
+        FileObserver(),
+        ErrorContextObserver(),
+        MemoryWriteObserver(),
+        DelegationObserver(),
+    ]
