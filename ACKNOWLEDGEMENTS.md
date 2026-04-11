@@ -4,6 +4,17 @@ Mnemoria was developed in dialogue with prior work. These are the projects and p
 
 ## Direct inspirations we actually used
 
+### Ori-Mnemos
+- https://github.com/aayoawoyemi/Ori-Mnemos
+
+Mnemoria's retrieval intelligence is a Python port of the original Ori-Mnemos TypeScript architecture. Specific components carried over:
+- Q-value reinforcement learning for memory retrieval (from `qvalue.ts`)
+- Phase B UCB-Tuned reranking with cold-start protection (from `rerank.ts`)
+- Three-stage post-fusion dampening pipeline: gravity, hub, resolution (from `dampening.ts`)
+- Query intent classification with 6 intent types and dynamic signal weighting (from `classify.ts`)
+- LinUCB contextual bandit stage meta-learning with ACQO two-phase curriculum (from `tracking.ts`)
+- NPMI-normalized co-occurrence edges, bibliographic coupling bootstrap, Tarjan articulation point protection, and revival spikes on new connections
+
 ### Honcho
 - https://honcho.dev/
 
@@ -41,15 +52,6 @@ In particular, it shaped:
 - format-sensitivity evaluation
 - timestamp-integrity concerns
 - several retrieval-fusion discussions explored during development
-
-## Not currently listed as confirmed inspirations
-
-The following may be interesting or adjacent, but we do not currently have strong enough evidence in the Mnemoria work history to claim them here as real inspirations for the current released design:
-- https://github.com/vacui-dev/synsets
-- https://github.com/NousResearch/hermes-agent/pull/727
-- https://github.com/agiresearch/A-mem
-
-If later work clearly incorporates ideas from them, they should absolutely be added with a precise note about what they contributed.
 
 ## Philosophy of credit
 
