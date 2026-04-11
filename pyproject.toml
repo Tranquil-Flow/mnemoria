@@ -1,6 +1,6 @@
 [project]
 name = "mnemoria"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cognitive memory system for AI agents — ACT-R activation, typed facts, Hebbian links, RL reranking"
 readme = "README.md"
 license = {text = "AGPL-3.0-or-later"}
