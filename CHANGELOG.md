@@ -24,6 +24,11 @@ The format is based on Keep a Changelog.
 
 - **README** — rewritten with research foundations table, feature overview, and conceptual pipeline description. Version-specific sections removed.
 
+### Verified
+
+- **Benchmark: 0.927 overall** — full suite (25 categories, 424 queries, seed 42, 1 run). Up from 0.910 baseline. Results: `benchmarks/results/v0.2.1.json`.
+- Perfect scores (1.000): capacity_stress, compression, compression_survival, consolidation, conversation_memory, delegation_memory, integration, qlearning, scale, scope_lifecycle, scopes, timestamp_integrity, typed_decay.
+
 ## [0.2.0] - 2026-04-08
 
 ### Added
