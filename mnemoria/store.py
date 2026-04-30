@@ -786,6 +786,109 @@ class MnemoriaStore:
         seeds.sort(key=lambda s: s.score, reverse=True)
         return seeds[:top_k]
 
+    # ─── Targeted Forgetting ─────────────────────────────────────
+
+    def forget(self, fact_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """Permanently erase one fact and all local retrieval traces.
+
+        This is a privacy erasure API, not soft archival: it deletes the fact,
+        FTS entry, links, access history, pending rows that reference or duplicate
+        the content, and Q-value state. The returned receipt and deletion log keep
+        only a content hash, never the deleted content itself.
+        """
+        row = self._conn.execute(
+            "SELECT id, content, source_hash FROM um_facts WHERE id = ?",
+            (fact_id,),
+        ).fetchone()
+        if row is None:
+            return {"fact_id": fact_id, "deleted": False, "reason": reason}
+
+        now = self._now()
+        content = row["content"]
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        log_id = str(uuid.uuid4())
+
+        with self._conn:
+            # Remove pending/provisional copies first so foreign-key references and
+            # sensitive duplicate content disappear before the canonical fact row.
+            self._conn.execute(
+                "DELETE FROM um_pending WHERE promoted_to = ? OR retracted_by = ? OR content = ?",
+                (fact_id, fact_id, content),
+            )
+            self._conn.execute(
+                "DELETE FROM um_access_times WHERE fact_id = ?",
+                (fact_id,),
+            )
+            self._conn.execute(
+                "DELETE FROM um_links WHERE source_id = ? OR target_id = ?",
+                (fact_id, fact_id),
+            )
+            self._conn.execute(
+                "DELETE FROM um_qvalues WHERE memory_id = ?",
+                (fact_id,),
+            )
+            self._conn.execute(
+                "UPDATE um_facts SET superseded_by = NULL WHERE superseded_by = ?",
+                (fact_id,),
+            )
+            self._conn.execute(
+                "DELETE FROM um_facts WHERE id = ?",
+                (fact_id,),
+            )
+            self._conn.execute(
+                """INSERT INTO um_deletion_log
+                   (id, fact_id, content_hash, reason, deleted_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (log_id, fact_id, content_hash, reason, now),
+            )
+
+        # FTS5 external-content delete triggers should have removed the row.
+        # Rebuild as a conservative integrity sweep, including for databases
+        # created before triggers were fixed or manually edited in tests.
+        self._conn.execute("INSERT INTO um_facts_fts(um_facts_fts) VALUES('rebuild')")
+        self._conn.commit()
+
+        if self._qvalue_store:
+            try:
+                self._qvalue_store.delete(fact_id)
+            except AttributeError:
+                self._qvalue_store._conn.execute(
+                    "DELETE FROM memory_qvalues WHERE memory_id = ?", (fact_id,)
+                )
+                self._qvalue_store._conn.commit()
+
+        return {
+            "fact_id": fact_id,
+            "deleted": True,
+            "content_hash": content_hash,
+            "reason": reason,
+            "deleted_at": now,
+        }
+
+    def forget_by_content(self, pattern: str, reason: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Permanently erase active/cold facts whose content contains pattern.
+
+        Matching is case-insensitive SQLite LIKE semantics with user wildcards
+        escaped, so the pattern is treated as literal text.
+        """
+        if not pattern:
+            return []
+
+        escaped = (
+            pattern
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        rows = self._conn.execute(
+            """SELECT id FROM um_facts
+               WHERE status IN ('active', 'cold', 'superseded', 'archived')
+                 AND content LIKE ? ESCAPE '\\'
+               ORDER BY created_at, id""",
+            (f"%{escaped}%",),
+        ).fetchall()
+        return [self.forget(row["id"], reason=reason) for row in rows]
+
     def get_stats(self) -> Dict[str, Any]:
         """Return store statistics."""
         fact_row = self._conn.execute(

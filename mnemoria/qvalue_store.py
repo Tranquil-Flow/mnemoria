@@ -133,5 +133,10 @@ class QValueStore:
         self._conn.execute("DELETE FROM memory_qvalues")
         self._conn.commit()
 
+    def delete(self, memory_id: str) -> None:
+        """Delete all Q-value state for a forgotten memory."""
+        self._conn.execute("DELETE FROM memory_qvalues WHERE memory_id = ?", (memory_id,))
+        self._conn.commit()
+
     def close(self):
         self._conn.close()

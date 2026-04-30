@@ -176,11 +176,24 @@ CREATE TABLE IF NOT EXISTS um_metrics (
     retract_count    INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (session_id, observer)
 );
+
+-- ----------------------------------------------------------- um_deletion_log --
+-- Audit log for targeted erasure. Deliberately stores only hashes/metadata,
+-- never the deleted content itself.
+CREATE TABLE IF NOT EXISTS um_deletion_log (
+    id           TEXT PRIMARY KEY,
+    fact_id      TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    reason       TEXT,
+    deleted_at   REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_um_deletion_log_fact_id ON um_deletion_log(fact_id);
 """
 
 
 def _migrate_to_v2(conn: sqlite3.Connection) -> None:
-    """Add provenance column if missing (for existing DBs)."""
+    """Add tables/columns introduced after the initial unified schema."""
     facts_cols = {row[1] for row in conn.execute("PRAGMA table_info(um_facts)")}
     if "provenance" not in facts_cols:
         conn.execute("ALTER TABLE um_facts ADD COLUMN provenance TEXT")
@@ -188,6 +201,19 @@ def _migrate_to_v2(conn: sqlite3.Connection) -> None:
     pending_cols = {row[1] for row in conn.execute("PRAGMA table_info(um_pending)")}
     if "provenance" not in pending_cols:
         conn.execute("ALTER TABLE um_pending ADD COLUMN provenance TEXT")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS um_deletion_log (
+            id           TEXT PRIMARY KEY,
+            fact_id      TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            reason       TEXT,
+            deleted_at   REAL NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_um_deletion_log_fact_id ON um_deletion_log(fact_id)"
+    )
 
 
 def init_db(conn: sqlite3.Connection) -> None:
