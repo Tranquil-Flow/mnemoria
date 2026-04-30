@@ -4,6 +4,35 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.2.3] - 2026-04-30
+
+### Added
+
+- **Targeted forgetting API** — `MnemoriaStore.forget()` and `forget_by_content()` permanently erase selected facts, FTS entries, links, access history, pending duplicates/references, and Q-value state while returning non-leaking deletion receipts. Added `um_deletion_log` with content hashes only.
+
+### Verified
+
+- **Tests:** 95 passed in this container after targeted-forgetting tests were added.
+- **Privacy forgetting smoke:** benchmark suite `r` passed at 1.000 over 10 scenarios with the Mnemoria adapter declaring `forgetting=True`.
+- **Expanded benchmark:** 0.907 overall across 30 categories / 483 queries, seed 42, 1 run. This includes the new P-T categories; compare against earlier 25-category results only via matching category subsets.
+
+## [0.2.2] - 2026-04-30
+
+### Added
+
+- **Benchmark result bundle** — committed full v0.2.2 benchmark output under `benchmarks/results/v0.2.2.json` plus a benchmark README with the recorded 0.927 full-suite score and 0.913 core score.
+- **v0.3 research docs** — added research notes for LOCOMO, embedding upgrades, temporal validity, deduplication, topic shift handling, procedural memory, memory safety, and consolidation improvements.
+- **Implementation specs** — added concrete specs for embedding upgrade, temporal validity, procedural memory, and deduplication threshold strategy.
+
+### Fixed
+
+- **Runtime package version** — `mnemoria.__version__` now matches the package metadata version. The previous v0.2.1 git tag pointed at a commit where `__version__` still reported `0.1.0`; the built v0.2.1 artifacts were correct, but tag-based version inspection was misleading.
+
+### Verified
+
+- **Tests:** 91 passed on Python 3.14.2.
+- **Benchmark:** 0.927 overall and 0.913 core across 25 categories / 424 queries, seed 42, 1 run.
+
 ## [0.2.1] - 2026-04-11
 
 ### Added
