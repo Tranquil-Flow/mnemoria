@@ -212,6 +212,81 @@ def create_keyword_links(
     return created
 
 
+def create_entity_links(
+    conn: sqlite3.Connection,
+    fact_id: str,
+    fact_content: str,
+    now: float,
+    base_strength: float = 0.20,
+    max_recent_per_entity: int = 8,
+    half_life_days: float = 90.0,
+    min_strength: float = 0.02,
+) -> int:
+    """Create cross-session links between facts mentioning the same entity.
+
+    Bridges the gap LoCoMo `multi_hop` questions need: "When did Caroline
+    mention X?" — the event description lives in one session, the date in
+    another, and they're linked only by sharing the entity "Caroline". The
+    existing `create_temporal_links` only links within ±4 in the same scope,
+    which doesn't reach across sessions.
+
+    Strength shrinks with the age gap on a 90-day half-life so older mentions
+    still link but with less weight, mirroring temporal decay in episodic
+    memory. Scope-agnostic on purpose — entity bridges are *meant* to span
+    scope boundaries.
+    """
+    from mnemoria.entities import extract_entities
+
+    if base_strength <= 0:
+        return 0
+    entities = extract_entities(fact_content)
+    if not entities:
+        return 0
+
+    seen_targets: Set[str] = set()
+    created = 0
+    seconds_per_day = 86400.0
+
+    # Existing outgoing links — avoid duplicates with other link types.
+    existing_targets = {
+        r["target_id"] for r in conn.execute(
+            "SELECT target_id FROM um_links WHERE source_id = ?", (fact_id,)
+        ).fetchall()
+    }
+    seen_targets.update(existing_targets)
+
+    for entity in entities:
+        # Skip very short entities — too noisy for substring match.
+        if len(entity) < 3:
+            continue
+        rows = conn.execute(
+            """
+            SELECT id, created_at FROM um_facts
+            WHERE id != ?
+              AND status IN ('active', 'cold')
+              AND content LIKE ? COLLATE NOCASE
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (fact_id, f"%{entity}%", max_recent_per_entity),
+        ).fetchall()
+
+        for r in rows:
+            target_id = r["id"]
+            if target_id in seen_targets:
+                continue
+            age_seconds = max(now - (r["created_at"] or now), 0.0)
+            age_days = age_seconds / seconds_per_day
+            strength = base_strength * math.exp(-age_days / half_life_days)
+            if strength < min_strength:
+                continue
+            _upsert_link(conn, fact_id, target_id, strength, now, "entity")
+            seen_targets.add(target_id)
+            created += 1
+
+    return created
+
+
 def create_temporal_links(
     conn: sqlite3.Connection,
     fact_id: str,

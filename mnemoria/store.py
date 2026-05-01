@@ -336,6 +336,13 @@ class MnemoriaStore:
                     base_strength=self._config.temporal_link_strength,
                     max_recent=self._config.temporal_link_max_recent,
                 )
+            if self._config.enable_entity_links:
+                link_ops.create_entity_links(
+                    self._conn, fact_id, content, now,
+                    base_strength=self._config.entity_link_strength,
+                    max_recent_per_entity=self._config.entity_link_max_recent,
+                    half_life_days=self._config.entity_link_half_life_days,
+                )
             self._conn.commit()
 
         # Gauge pressure check

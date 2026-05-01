@@ -76,6 +76,24 @@ class MnemoriaConfig:
     temporal_link_max_recent: int = 4
     """How many recent memories to link to when storing a new fact."""
 
+    enable_entity_links: bool = True
+    """Create cross-session links between facts mentioning the same proper-noun
+    entity at store time. Critical for multi-hop questions where the event lives
+    in one session and the date / answer lives in another — sharing an entity
+    (person, place, acronym) is the only structural bridge. Default ON in v0.3."""
+
+    entity_link_strength: float = 0.20
+    """Base strength for entity-anchored cross-session links."""
+
+    entity_link_max_recent: int = 8
+    """How many recent same-entity facts to link to per entity per store call."""
+
+    entity_link_half_life_days: float = 90.0
+    """Time decay for entity links — strength = base * exp(-age_days / half_life).
+    Long half-life (90 days default) is intentional: entity bridges are *meant*
+    to reach across the whole conversation history, unlike temporal_links which
+    are short-window adjacency."""
+
     prune_threshold: float = 0.01
     """Activation below which to prune archived memories."""
 

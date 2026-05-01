@@ -1,0 +1,42 @@
+{
+  "label": "B2-entity-links",
+  "timestamp": "2026-05-01T11:50:11.934387+00:00",
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "locomo_wall_time_s": 256.7735102176666,
+  "longmemeval_wall_time_s": 23.85508108139038,
+  "locomo": {
+    "total": 20,
+    "correct": 4,
+    "score": 0.2,
+    "by_type": {
+      "single_hop": {
+        "total": 10,
+        "correct": 3,
+        "score": 0.3
+      },
+      "multi_hop": {
+        "total": 10,
+        "correct": 1,
+        "score": 0.1
+      }
+    }
+  },
+  "longmemeval": {
+    "total": 10,
+    "correct": 4,
+    "score": 0.4,
+    "by_type": {
+      "temporal-reasoning": {
+        "total": 5,
+        "correct": 3,
+        "score": 0.6
+      },
+      "multi-session": {
+        "total": 5,
+        "correct": 1,
+        "score": 0.2
+      }
+    }
+  }
+}
