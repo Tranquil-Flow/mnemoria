@@ -1,0 +1,42 @@
+{
+  "label": "C2d-relative-only",
+  "timestamp": "2026-05-01T21:42:31.870147+00:00",
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "locomo_wall_time_s": 113.22103714942932,
+  "longmemeval_wall_time_s": 7.318056106567383,
+  "locomo": {
+    "total": 20,
+    "correct": 10,
+    "score": 0.5,
+    "by_type": {
+      "multi_hop": {
+        "total": 10,
+        "correct": 7,
+        "score": 0.7
+      },
+      "single_hop": {
+        "total": 10,
+        "correct": 3,
+        "score": 0.3
+      }
+    }
+  },
+  "longmemeval": {
+    "total": 10,
+    "correct": 4,
+    "score": 0.4,
+    "by_type": {
+      "temporal-reasoning": {
+        "total": 5,
+        "correct": 3,
+        "score": 0.6
+      },
+      "multi-session": {
+        "total": 5,
+        "correct": 1,
+        "score": 0.2
+      }
+    }
+  }
+}

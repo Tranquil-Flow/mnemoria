@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from collections import Counter
@@ -57,10 +58,113 @@ def _summary_to_dict(summary) -> dict:
     }
 
 
+_LOCOMO_DATE_CACHE: dict[str, list[str]] | None = None
+
+
+def _load_session_dates_by_conversation() -> dict[str, list[str]]:
+    """Read raw locomo10.json and build {sample_id: [session_1_date_time, ...]}.
+
+    The standard LoCoMo loader discards `session_X_date_time` keys; this map
+    lets the slice runner re-attach them so multi_hop "when did X happen?"
+    questions have the gold dates somewhere in the corpus to retrieve.
+    """
+    global _LOCOMO_DATE_CACHE
+    if _LOCOMO_DATE_CACHE is not None:
+        return _LOCOMO_DATE_CACHE
+    from pathlib import Path
+    cache_path = Path.home() / ".cache/huggingface/datasets/locomo/locomo10.json"
+    if not cache_path.exists():
+        _LOCOMO_DATE_CACHE = {}
+        return _LOCOMO_DATE_CACHE
+    with open(cache_path) as f:
+        raw = json.load(f)
+    out: dict[str, list[str]] = {}
+    for conv_obj in raw:
+        if not isinstance(conv_obj, dict):
+            continue
+        sample_id = str(conv_obj.get("sample_id", ""))
+        conversation = conv_obj.get("conversation", {})
+        dates: list[str] = []
+        i = 1
+        while True:
+            sk = f"session_{i}"
+            dk = f"session_{i}_date_time"
+            if sk not in conversation:
+                break
+            dates.append(str(conversation.get(dk, "")).strip())
+            i += 1
+        if sample_id:
+            out[sample_id] = dates
+    _LOCOMO_DATE_CACHE = out
+    return out
+
+
+# Turns containing these markers reference the session date and need it
+# attached for retrieval to recover the absolute date. Other turns get a
+# clean store so embedding similarity isn't diluted on non-temporal queries.
+_RELATIVE_TIME_TURN_RE = re.compile(
+    r"\b(yesterday|today|tonight|tomorrow|"
+    r"last\s+(week|night|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"this\s+(week|month|year|morning|afternoon|evening)|"
+    r"next\s+(week|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"recently|just\s+(now|yesterday)|earlier\s+today)\b",
+    re.IGNORECASE,
+)
+
+
+def _ingest_locomo_with_dates(
+    store, question, session_dates: list[str]
+) -> int:
+    """Ingest a LoCoMo conversation while preserving session_X_date_time.
+
+    Each session begins with a single date-anchor fact ("This conversation
+    session took place on 8 May, 2023.") so retrieval for "when did X"
+    queries can surface the date alongside the evidence turn.
+
+    Within a session, only turns that use relative-time markers (yesterday,
+    last week, this month, ...) get the date appended as a parenthetical
+    suffix. This is where the date is *needed* to disambiguate; appending
+    it to every turn dilutes similarity on non-temporal queries.
+    """
+    evidence_set = set(question.evidence or [])
+    count = 0
+    for session_idx, session_turns in enumerate(question.conversation_sessions):
+        date_str = (
+            session_dates[session_idx]
+            if session_idx < len(session_dates)
+            else ""
+        ).strip()
+        if date_str:
+            anchor = (
+                f"This conversation session (session {session_idx + 1}) "
+                f"took place on {date_str}."
+            )
+            store.store(anchor, category="factual", importance=0.7)
+            count += 1
+        for turn in session_turns:
+            text = turn.get("text", "").strip()
+            if not text:
+                continue
+            speaker = turn.get("speaker", "")
+            dia_id = turn.get("dia_id", "")
+            importance = 0.8 if dia_id in evidence_set else 0.5
+            base = f"{speaker}: {text}" if speaker else text
+            needs_date = bool(date_str and _RELATIVE_TIME_TURN_RE.search(text))
+            content = f"{base} (on {date_str})" if needs_date else base
+            store.store(content, category="factual", importance=importance)
+            count += 1
+        if session_idx < len(question.conversation_sessions) - 1:
+            store.simulate_time(1)
+    return count
+
+
 def _run_locomo(curated: list[dict], backend_kwargs: dict) -> tuple[dict, float]:
     from benchmarks.backends.mnemoria_adapter import MnemoriaBenchmarkAdapter
     from benchmarks.judge import HeuristicJudge
-    from benchmarks.locomo.adapter import load_locomo_dataset, run_locomo
+    from benchmarks.locomo.adapter import (
+        load_locomo_dataset, evaluate_question,
+        QUESTION_TYPES, LoCoMoSummary,
+    )
 
     locomo_ids = {c["question_id"] for c in curated if c["benchmark"] == "locomo"}
     questions = load_locomo_dataset(sample=500)
@@ -69,13 +173,50 @@ def _run_locomo(curated: list[dict], backend_kwargs: dict) -> tuple[dict, float]
         missing = locomo_ids - {q.question_id for q in filtered}
         raise RuntimeError(f"Missing LoCoMo questions: {missing}")
 
+    inject_dates = os.environ.get("LOCOMO_INJECT_DATES", "1").lower() not in (
+        "0", "false", "no", "off",
+    )
+    date_map = _load_session_dates_by_conversation() if inject_dates else {}
+
+    judge = HeuristicJudge()
+    results = []
+    correct = 0
+    by_type_counts: dict[str, dict[str, int]] = {}
+
     t0 = time.time()
-    summary = run_locomo(
-        questions=filtered,
-        judge=HeuristicJudge(),
-        backend_cls=MnemoriaBenchmarkAdapter,
-        backend_kwargs=backend_kwargs,
-        top_k=10,
+    for question in filtered:
+        store = MnemoriaBenchmarkAdapter(**backend_kwargs)
+        store.reset()
+        if inject_dates:
+            session_dates = date_map.get(question.conversation_id, [])
+            _ingest_locomo_with_dates(store, question, session_dates)
+        else:
+            from benchmarks.locomo.adapter import ingest_conversation_into_store
+            ingest_conversation_into_store(
+                store,
+                question.conversation_sessions,
+                evidence_refs=question.evidence,
+            )
+        r = evaluate_question(store, question, judge, top_k=10)
+        results.append(r)
+        if r.correct:
+            correct += 1
+        bt = by_type_counts.setdefault(
+            question.question_type, {"total": 0, "correct": 0},
+        )
+        bt["total"] += 1
+        if r.correct:
+            bt["correct"] += 1
+
+    by_type = {
+        qt: {"total": v["total"], "correct": v["correct"],
+             "score": v["correct"] / v["total"] if v["total"] else 0.0}
+        for qt, v in by_type_counts.items()
+    }
+    summary = LoCoMoSummary(
+        total=len(results), correct=correct,
+        score=correct / len(results) if results else 0.0,
+        by_type=by_type, results=results,
     )
     return _summary_to_dict(summary), time.time() - t0
 
