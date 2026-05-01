@@ -1,0 +1,152 @@
+[
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_0",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_1",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_5",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_6",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_8",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_9",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_10",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_12",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_16",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_17",
+    "question_type": "multi_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_3",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_4",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_7",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_11",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_13",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_15",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_18",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_19",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_23",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "locomo",
+    "question_id": "conv-26_24",
+    "question_type": "single_hop"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "0a995998",
+    "question_type": "multi-session"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "6d550036",
+    "question_type": "multi-session"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "gpt4_59c863d7",
+    "question_type": "multi-session"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "b5ef892d",
+    "question_type": "multi-session"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "e831120c",
+    "question_type": "multi-session"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "gpt4_2655b836",
+    "question_type": "temporal-reasoning"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "gpt4_2487a7cb",
+    "question_type": "temporal-reasoning"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "gpt4_76048e76",
+    "question_type": "temporal-reasoning"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "gpt4_2312f94c",
+    "question_type": "temporal-reasoning"
+  },
+  {
+    "benchmark": "longmemeval",
+    "question_id": "0bb5a684",
+    "question_type": "temporal-reasoning"
+  }
+]
