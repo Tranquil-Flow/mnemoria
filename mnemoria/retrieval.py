@@ -69,6 +69,96 @@ TOKEN_SYNONYMS = {
 }
 
 
+# ── Conversational filler detection ──────────────────────────────────────
+#
+# Multi-session conversational corpora (LoCoMo, LongMemEval) carry many
+# socially-supportive turns ("Thanks Mel — your support means the world",
+# "Glad you agree, Caroline. Appreciate the encouragement.") that cluster
+# semantically with emotional queries and crowd out fact-bearing turns.
+# Demote them so the answer can surface in top-K.
+
+_SPEAKER_PREFIX_RE = re.compile(r"^[A-Z][A-Za-z'-]+:\s*")
+_SUBSTANTIVE_INSENSITIVE_RE = re.compile(
+    r"\b(19|20)\d{2}\b|"                                    # year
+    r"\b\d+\s*(year|yr|month|mo|week|wk|day|hour|hr|"       # duration
+    r"minute|min|second|sec)s?\b|"
+    r"\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|"     # month name
+    r"jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|"
+    r"oct(ober)?|nov(ember)?|dec(ember)?)\b|"
+    r"\b\d+\s*(am|pm)\b|"                                   # clock time
+    r"\$\s*\d+|"                                            # currency
+    r"\b\d+(\.\d+)?\s*(USD|EUR|GBP|km|mi|kg|lb)\b",         # quantity
+    re.IGNORECASE,
+)
+# Acronyms must be checked case-sensitively or [A-Z]{2,} also matches lower-case.
+_SUBSTANTIVE_ACRONYM_RE = re.compile(r"\b[A-Z]{2,}\b")
+
+
+def _has_substantive_content(body: str) -> bool:
+    return bool(
+        _SUBSTANTIVE_INSENSITIVE_RE.search(body)
+        or _SUBSTANTIVE_ACRONYM_RE.search(body)
+    )
+
+_SUPPORTIVE_RE = re.compile(
+    r"\b("
+    r"thanks?|thank\s+you|thx|ty|"
+    r"appreciate|grateful|"
+    r"inspir(e|ed|ing|ation)|amazing|incredible|wonderful|awesome|"
+    r"brave|courage(ous)?|encouragement|"
+    r"support(ive|s)?|kindness|caring|love(d|ly)?|sweet|"
+    r"tough|hard|"
+    r"yeah|yep|yup|nope|exactly|absolutely|totally|definitely|"
+    r"oh|wow+|omg+|lol+|aww+|yay+|woo+|hooray|"
+    r"hi|hey|hello|bye|goodbye|"
+    r"nice|cool|great|good|fantastic|"
+    r"so\s+(much|happy|glad|sorry|proud|excited|cool|amazing)|"
+    r"(i(\s+a|')m|am)\s+(so\s+|really\s+)?(happy|glad|sorry|proud|excited)|"
+    r"means\s+(a\s+lot|so\s+much|the\s+world)|"
+    r"glad\s+(to\s+hear|you|i)|"
+    r"that('s|\s+is)\s+(so\s+)?(cool|awesome|great|nice|amazing|wonderful|"
+    r"inspiring|exciting|tough|hard|sweet|fun)|"
+    r"that\s+must\s+(have\s+been|be)|"
+    r"keep\s+(it\s+up|going)|way\s+to\s+go|good\s+luck|"
+    r"way\s+to\s+go|congrats|congratulations|"
+    r"believe\s+in|proud\s+of|happy\s+for"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_conversational_filler(text: str) -> bool:
+    """Return True if `text` is a low-information supportive reaction.
+
+    Two regimes:
+    - Short bodies (< 80 chars): explicit filler-pattern check.
+    - Long bodies (80–250 chars): entity-density check — many supportive
+      markers and zero substantive tokens (years, durations, acronyms,
+      named entities) marks the turn as filler.
+
+    Bodies ≥ 250 chars are presumed informative and never classified as
+    filler — the cost of mis-classifying long content turns is high.
+    """
+    if not text or not text.strip():
+        return False
+    body = _SPEAKER_PREFIX_RE.sub("", text).strip()
+    if not body or len(body) >= 250:
+        return False
+    # If it has substantive content (year, duration, month name, acronym),
+    # never filler — fast path.
+    if _has_substantive_content(body):
+        return False
+    supportive_hits = len(_SUPPORTIVE_RE.findall(body))
+    if len(body) < 80:
+        # Short body: 1+ supportive marker is sufficient signal.
+        return supportive_hits >= 1
+    # Longer body (80-250 chars): cluster of supportive language with no
+    # specific content tokens marks it as filler. Threshold 2 catches
+    # "Thanks, Mel — your support means a lot" while still allowing
+    # opinionated content like "I really enjoyed the hike — it was fun."
+    return supportive_hits >= 2
+
+
 def _normalize_terms(text: str) -> Set[str]:
     """Tokenize text into cleaned terms with light synonym expansion."""
     raw_tokens = re.findall(r"[A-Za-z0-9_./-]+", text.lower())
@@ -215,6 +305,12 @@ def score_candidates(
         if re.search(r'\b(tool|framework|model|method|technology|engine|provider|gateway|region|algorithm|protocol|version|database|queue|grant|mode)\b', query_lower):
             if re.search(r'\b(?:[A-Z]{2,}[A-Z0-9-]*|[A-Z][a-zA-Z]+(?:\.[A-Za-z0-9]+)?(?:\s+[A-Z][a-zA-Z0-9.+-]+)*|[A-Z][a-z]+DB)\b', text):
                 answer_shape_boost += 0.20
+
+        # Filler penalty: short or supportive-dense conversational reactions
+        # never carry answers but cluster semantically with emotional queries.
+        # Demote them so fact-bearing turns win the top-K.
+        if _is_conversational_filler(text):
+            answer_shape_boost -= 0.6
 
         components = {
             "base_level": base_level,
