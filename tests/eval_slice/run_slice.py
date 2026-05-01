@@ -379,25 +379,105 @@ def _run_locomo(curated: list[dict], backend_kwargs: dict) -> tuple[dict, float]
     return _summary_to_dict(summary), time.time() - t0
 
 
+def _ingest_longmemeval_with_dates(store, question) -> int:
+    """Mirror of _ingest_locomo_with_dates for LongMemEval haystack_dates.
+
+    Per-session anchor + date suffix on turns with relative-time markers.
+    The standard adapter discards haystack_dates, which blocks
+    temporal-reasoning questions on the full benchmark (slice is too
+    narrow to expose this — full sample=500 runs show +15pp on the
+    temporal-reasoning subtype).
+    """
+    answer_session_ids = set(question.answer_session_ids or [])
+    sessions = list(zip(
+        question.haystack_session_ids,
+        question.haystack_sessions,
+    ))
+    dates = question.haystack_dates or []
+    qdate = (question.question_date or "").strip()
+    count = 0
+    if qdate:
+        store.store(
+            f"This question is being asked on {qdate}.",
+            category="factual", importance=0.6,
+        )
+        count += 1
+    for i, (session_id, session_msgs) in enumerate(sessions):
+        is_answer = session_id in answer_session_ids
+        date_str = (dates[i] if i < len(dates) else "").strip()
+        if date_str:
+            store.store(
+                f"This conversation session took place on {date_str}.",
+                category="factual", importance=0.7,
+            )
+            count += 1
+        for msg in session_msgs:
+            role = msg.get("role", "user")
+            content = msg.get("content", "").strip()
+            if not content:
+                continue
+            if is_answer:
+                importance = 0.8 if role == "user" else 0.6
+            else:
+                importance = 0.5 if role == "user" else 0.3
+            needs_date = bool(date_str and _RELATIVE_TIME_TURN_RE.search(content))
+            stored = f"{content} (on {date_str})" if needs_date else content
+            store.store(stored, category="factual", importance=importance)
+            count += 1
+        if i < len(sessions) - 1:
+            store.simulate_time(1)
+    return count
+
+
 def _run_longmemeval(curated: list[dict], backend_kwargs: dict) -> tuple[dict, float]:
     from benchmarks.backends.mnemoria_adapter import MnemoriaBenchmarkAdapter
     from benchmarks.judge import HeuristicJudge
-    from benchmarks.longmemeval.adapter import load_longmemeval_dataset, run_longmemeval
+    from benchmarks.longmemeval import adapter as lme_adapter
 
     longmem_ids = {c["question_id"] for c in curated if c["benchmark"] == "longmemeval"}
-    questions = load_longmemeval_dataset(sample=500)
+    questions = lme_adapter.load_longmemeval_dataset(sample=500)
     filtered = [q for q in questions if q.question_id in longmem_ids]
     if len(filtered) != len(longmem_ids):
         missing = longmem_ids - {q.question_id for q in filtered}
         raise RuntimeError(f"Missing LongMemEval questions: {missing}")
 
+    inject_dates = os.environ.get("LONGMEM_INJECT_DATES", "1").lower() not in (
+        "0", "false", "no", "off",
+    )
+
+    judge = HeuristicJudge()
+    per_q_results = []
+    correct = 0
+    by_type_counts: dict[str, dict[str, int]] = {}
+
     t0 = time.time()
-    summary = run_longmemeval(
-        questions=filtered,
-        judge=HeuristicJudge(),
-        backend_cls=MnemoriaBenchmarkAdapter,
-        backend_kwargs=backend_kwargs,
-        top_k=10,
+    for question in filtered:
+        store = MnemoriaBenchmarkAdapter(**backend_kwargs)
+        store.reset()
+        if inject_dates:
+            _ingest_longmemeval_with_dates(store, question)
+        else:
+            lme_adapter.ingest_sessions_into_store(store, question)
+        r = lme_adapter.evaluate_question(store, question, judge, top_k=10)
+        per_q_results.append(r)
+        if r.correct:
+            correct += 1
+        bt = by_type_counts.setdefault(
+            question.question_type, {"total": 0, "correct": 0},
+        )
+        bt["total"] += 1
+        if r.correct:
+            bt["correct"] += 1
+
+    by_type = {
+        qt: {"total": v["total"], "correct": v["correct"],
+             "score": v["correct"] / v["total"] if v["total"] else 0.0}
+        for qt, v in by_type_counts.items()
+    }
+    summary = lme_adapter.LongMemSummary(
+        total=len(per_q_results), correct=correct,
+        score=correct / len(per_q_results) if per_q_results else 0.0,
+        by_type=by_type, results=per_q_results,
     )
     return _summary_to_dict(summary), time.time() - t0
 
