@@ -473,7 +473,8 @@ class MnemoriaStore:
         3. FTS5/BM25 keyword fusion (if enabled)
         4. Q-value reranking (if enabled)
         5. Dampening (gravity, hub, resolution boost)
-        6. Update access stats and strengthen Hebbian links
+        6. Cross-encoder rerank (if enabled and pool large enough)
+        7. Update access stats and strengthen Hebbian links
 
         Returns top-K ScoredFact objects sorted by score.
         """
