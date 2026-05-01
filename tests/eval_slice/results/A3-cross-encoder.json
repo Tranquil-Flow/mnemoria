@@ -1,0 +1,42 @@
+{
+  "label": "A3-cross-encoder",
+  "timestamp": "2026-05-01T11:38:59.061600+00:00",
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "locomo_wall_time_s": 238.57824420928955,
+  "longmemeval_wall_time_s": 20.827953100204468,
+  "locomo": {
+    "total": 20,
+    "correct": 3,
+    "score": 0.15,
+    "by_type": {
+      "single_hop": {
+        "total": 10,
+        "correct": 3,
+        "score": 0.3
+      },
+      "multi_hop": {
+        "total": 10,
+        "correct": 0,
+        "score": 0.0
+      }
+    }
+  },
+  "longmemeval": {
+    "total": 10,
+    "correct": 4,
+    "score": 0.4,
+    "by_type": {
+      "temporal-reasoning": {
+        "total": 5,
+        "correct": 3,
+        "score": 0.6
+      },
+      "multi-session": {
+        "total": 5,
+        "correct": 1,
+        "score": 0.2
+      }
+    }
+  }
+}

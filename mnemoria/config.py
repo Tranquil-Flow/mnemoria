@@ -156,6 +156,49 @@ class MnemoriaConfig:
     """Enable Turrigiano homeostatic scaling after each Hebbian update round."""
 
     # ------------------------------------------------------------------
+    # Cross-Encoder Reranker (v0.3)
+    # ------------------------------------------------------------------
+
+    enable_cross_encoder_rerank: bool = True
+    """Run a cross-encoder over the top-N candidates as the final scoring stage.
+    The cross-encoder reads (query, fact) pairs and scores joint relevance
+    directly — much better at precision than activation/embedding alone.
+    Default ON in v0.3 since the eval slice showed embedding-only ranking
+    surfaces emotionally-adjacent turns over fact-bearing turns on
+    conversational corpora (LoCoMo single_hop). Falls back to a no-op if
+    sentence-transformers is unavailable."""
+
+    cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    """Model name for CrossEncoderReranker. Defaults to MiniLM-L-6-v2 (~22MB,
+    fast). Swap to BAAI/bge-reranker-v2-m3 (~568MB, higher quality) if
+    latency budget allows."""
+
+    cross_encoder_pool: int = 50
+    """Number of candidates to feed into the cross-encoder. Activation
+    selects the top N from the pool; cross-encoder reorders. 50 is a
+    reasonable default — small enough to stay <100ms on CPU, big enough
+    to catch buried correct answers."""
+
+    cross_encoder_min_pool: int = 5
+    """Minimum candidate-pool size below which the cross-encoder is skipped.
+    Tiny stores (e.g. unit tests with 2 facts, or scopes that only ever held
+    a handful of memories) hit a regime where the dampening / supersession
+    signals are more reliable than raw passage relevance."""
+
+    cross_encoder_act_weight: float = 0.40
+    """RRF weight on the activation rank when fusing with cross-encoder.
+    The pre-cross-encoder score already encodes dampening + supersession +
+    Q-value reranking, so we keep a meaningful 40% so those signals aren't
+    dropped on the floor."""
+
+    cross_encoder_ce_weight: float = 0.60
+    """RRF weight on the cross-encoder rank. Larger than the activation
+    weight because the cross-encoder is the precision-targeted signal,
+    but bounded so a single off-the-cuff cross-encoder mistake can't
+    fully override the dampening pipeline (which catches task-prompt vs
+    task-result style failures)."""
+
+    # ------------------------------------------------------------------
     # Dampening Pipeline  (from CognitiveMemoryConfig)
     # ------------------------------------------------------------------
 

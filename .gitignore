@@ -87,3 +87,7 @@ docs/superpowers/
 debug_*.py
 verify_*.py
 .venv-*/
+
+# Eval slice — baseline + per-shipped-change snapshots are committed; the
+# always-overwritten latest.json and per-attempt failure runs stay local.
+tests/eval_slice/results/latest.json

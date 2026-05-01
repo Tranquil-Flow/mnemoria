@@ -73,6 +73,10 @@ class MnemoriaStore:
         self._embedder = None
         self._embedder_initialized = False
 
+        # Lazy-load cross-encoder reranker
+        self._reranker = None
+        self._reranker_initialized = False
+
         # Virtual clock for benchmarking
         self._simulated_time_offset: float = 0.0
         self._use_virtual_clock: bool = False
@@ -135,6 +139,22 @@ class MnemoriaStore:
                 self._embedder = None
             self._embedder_initialized = True
         return self._embedder
+
+    def _get_reranker(self):
+        """Lazy-initialize the cross-encoder reranker. Class-level cache shares
+        loaded models across stores in the same process."""
+        if not self._reranker_initialized:
+            if self._config.enable_cross_encoder_rerank:
+                try:
+                    from mnemoria.reranker import CrossEncoderReranker
+                    self._reranker = CrossEncoderReranker(self._config.cross_encoder_model)
+                    if not self._reranker.is_available:
+                        self._reranker = None
+                except Exception as e:
+                    logger.warning(f"CrossEncoderReranker init failed ({e}) — disabling")
+                    self._reranker = None
+            self._reranker_initialized = True
+        return self._reranker
 
     def _now(self) -> float:
         """Current time, accounting for simulated time offset."""
@@ -530,6 +550,44 @@ class MnemoriaStore:
         # IPS debiasing — counteract popularity bias after dampening
         apply_ips_debiasing(scored, self._conn, self._config)
         scored.sort(key=lambda s: s.score, reverse=True)
+
+        # Cross-encoder rerank — final precision pass over the top-N candidates.
+        # Activation/embedding scoring is good at recall (right facts in pool)
+        # but weak at precision (correct ordering). The cross-encoder reads
+        # (query, fact) pairs and scores joint relevance directly. Fused with
+        # activation via RRF rather than replacing it, since pure cross-encoder
+        # scores ignore the dampening/supersession signals that distinguish e.g.
+        # task prompts from task results.
+        reranker = self._get_reranker()
+        # Gate: cross-encoder is a precision pass over a recall pool. For tiny
+        # pools (≤4 candidates) the existing dampening / supersession signals
+        # were designed to disambiguate small sets and do better than raw
+        # passage relevance (e.g. task prompt vs task result).
+        if (
+            reranker is not None
+            and len(scored) >= self._config.cross_encoder_min_pool
+        ):
+            pool_size = self._config.cross_encoder_pool
+            pool = scored[:pool_size]
+            ce_scores = reranker.score(query, [s.fact.content for s in pool])
+            if ce_scores and any(s != 0.0 for s in ce_scores):
+                # RRF fusion of activation rank and cross-encoder rank
+                act_order = sorted(range(len(pool)), key=lambda i: pool[i].score, reverse=True)
+                act_rank = {idx: rank for rank, idx in enumerate(act_order)}
+                ce_order = sorted(range(len(pool)), key=lambda i: ce_scores[i], reverse=True)
+                ce_rank = {idx: rank for rank, idx in enumerate(ce_order)}
+                k_rrf = self._config.rrf_k
+                w_act = self._config.cross_encoder_act_weight
+                w_ce = self._config.cross_encoder_ce_weight
+                for i, item in enumerate(pool):
+                    item.components['prev_score'] = item.score
+                    item.components['cross_encoder_score'] = ce_scores[i]
+                    item.score = (
+                        w_act * 1.0 / (k_rrf + act_rank[i] + 1)
+                        + w_ce * 1.0 / (k_rrf + ce_rank[i] + 1)
+                    )
+                scored = pool
+                scored.sort(key=lambda s: s.score, reverse=True)
 
         # Diversify the final slate to avoid near-duplicate cluster domination.
         # This especially helps multi-needle queries where top-k should cover
