@@ -295,15 +295,22 @@ def _ingest_locomo_with_dates(
             # Emit resolved-date facts as separate auxiliary memories. This
             # surfaces absolute dates ("2022", "7 May 2023", "10 years ago")
             # for the heuristic judge without polluting the original turn's
-            # embedding similarity on non-temporal queries.
+            # embedding similarity on non-temporal queries. The auxiliary
+            # fact carries a snippet of the original turn so retrieval can
+            # link it to the topic of the question.
             if has_relative:
                 resolved = _resolve_relative_dates(text, parsed_date)
-                for rd in resolved:
-                    store.store(
-                        f"Reference resolved from a session-{session_idx + 1} turn: {rd}.",
-                        category="factual", importance=0.6,
-                    )
-                    count += 1
+                if resolved:
+                    snippet = text if len(text) <= 120 else text[:117] + "..."
+                    speaker_part = f"{speaker} said: " if speaker else ""
+                    for rd in resolved:
+                        store.store(
+                            f"{speaker_part}\"{snippet}\" "
+                            f"(session {session_idx + 1}, {date_str}) "
+                            f"-- this resolves to {rd}.",
+                            category="factual", importance=0.6,
+                        )
+                        count += 1
         if session_idx < len(question.conversation_sessions) - 1:
             store.simulate_time(1)
     return count

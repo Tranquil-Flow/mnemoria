@@ -1,19 +1,19 @@
 {
-  "label": "C5c-resolved-aux-facts",
-  "timestamp": "2026-05-01T22:25:12.474198+00:00",
+  "label": "C5d-rich-aux",
+  "timestamp": "2026-05-01T22:30:39.224988+00:00",
   "profile": "balanced",
   "embedding_model": "auto",
-  "locomo_wall_time_s": 124.78992509841919,
-  "longmemeval_wall_time_s": 7.854583978652954,
+  "locomo_wall_time_s": 129.9165859222412,
+  "longmemeval_wall_time_s": 8.297683954238892,
   "locomo": {
     "total": 20,
-    "correct": 11,
-    "score": 0.55,
+    "correct": 12,
+    "score": 0.6,
     "by_type": {
       "multi_hop": {
         "total": 10,
-        "correct": 8,
-        "score": 0.8
+        "correct": 9,
+        "score": 0.9
       },
       "single_hop": {
         "total": 10,
