@@ -1,0 +1,42 @@
+{
+  "label": "B1B5-multihop-route",
+  "timestamp": "2026-05-01T12:04:29.411433+00:00",
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "locomo_wall_time_s": 594.7922420501709,
+  "longmemeval_wall_time_s": 17.53031015396118,
+  "locomo": {
+    "total": 20,
+    "correct": 4,
+    "score": 0.2,
+    "by_type": {
+      "single_hop": {
+        "total": 10,
+        "correct": 3,
+        "score": 0.3
+      },
+      "multi_hop": {
+        "total": 10,
+        "correct": 1,
+        "score": 0.1
+      }
+    }
+  },
+  "longmemeval": {
+    "total": 10,
+    "correct": 4,
+    "score": 0.4,
+    "by_type": {
+      "temporal-reasoning": {
+        "total": 5,
+        "correct": 3,
+        "score": 0.6
+      },
+      "multi-session": {
+        "total": 5,
+        "correct": 1,
+        "score": 0.2
+      }
+    }
+  }
+}
