@@ -1,0 +1,47 @@
+{
+  "benchmark": "longmemeval",
+  "dataset": "xiaowu0162/longmemeval-cleaned",
+  "mnemoria_version": "0.3.0+dates",
+  "sample": 500,
+  "total": 500,
+  "correct": 183,
+  "score": 0.366,
+  "wall_time_seconds": 392.7036828994751,
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "judge": "HeuristicJudge",
+  "timestamp": "2026-05-01T23:25:09.041571+00:00",
+  "by_type": {
+    "temporal-reasoning": {
+      "total": 133,
+      "correct": 51,
+      "score": 0.38345864661654133
+    },
+    "multi-session": {
+      "total": 133,
+      "correct": 31,
+      "score": 0.23308270676691728
+    },
+    "knowledge-update": {
+      "total": 78,
+      "correct": 39,
+      "score": 0.5
+    },
+    "single-session-preference": {
+      "total": 30,
+      "correct": 13,
+      "score": 0.43333333333333335
+    },
+    "single-session-assistant": {
+      "total": 56,
+      "correct": 13,
+      "score": 0.23214285714285715
+    },
+    "single-session-user": {
+      "total": 70,
+      "correct": 36,
+      "score": 0.5142857142857142
+    }
+  },
+  "note": "Run with date-injecting ingestion (haystack_dates re-attached as session anchors + relative-time suffix on turns)."
+}

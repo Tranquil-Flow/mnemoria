@@ -1,0 +1,42 @@
+{
+  "benchmark": "locomo",
+  "dataset": "snap-research/locomo",
+  "mnemoria_version": "0.3.0+dates+resolver+filler",
+  "sample": 500,
+  "total": 500,
+  "correct": 367,
+  "score": 0.734,
+  "wall_time_seconds": 6192.631301164627,
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "judge": "HeuristicJudge",
+  "timestamp": "2026-05-02T00:53:20.226397+00:00",
+  "by_type": {
+    "multi_hop": {
+      "total": 91,
+      "correct": 77,
+      "score": 0.8461538461538461
+    },
+    "temporal": {
+      "total": 22,
+      "correct": 2,
+      "score": 0.09090909090909091
+    },
+    "single_hop": {
+      "total": 75,
+      "correct": 37,
+      "score": 0.49333333333333335
+    },
+    "open_domain": {
+      "total": 200,
+      "correct": 139,
+      "score": 0.695
+    },
+    "adversarial": {
+      "total": 112,
+      "correct": 112,
+      "score": 1.0
+    }
+  },
+  "note": "Run with date-injecting ingestion: session_X_date_time anchor + relative-time suffix on turns + relative-date resolver emitting auxiliary facts. Filler-filter active in score_candidates."
+}
