@@ -14,7 +14,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -32,59 +31,7 @@ FAIRNESS_ROOT = Path(os.environ.get(
 if str(FAIRNESS_ROOT) not in sys.path:
     sys.path.insert(0, str(FAIRNESS_ROOT))
 
-# Load the slice runner by file path so we can reuse the relative-time
-# regex and resolver helpers (the slice isn't a real package).
-_slice_path = REPO / "tests" / "eval_slice" / "run_slice.py"
-_spec = importlib.util.spec_from_file_location("eval_slice_run", _slice_path)
-_slice_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_slice_mod)
-_RELATIVE_TIME_TURN_RE = _slice_mod._RELATIVE_TIME_TURN_RE
-
-
-def _ingest_longmemeval_with_dates(store, question) -> int:
-    """Mirror of _ingest_locomo_with_dates for LongMemEval haystack_dates.
-
-    Per-session anchor + date suffix on turns with relative-time markers.
-    """
-    answer_session_ids = set(question.answer_session_ids or [])
-    sessions = list(zip(
-        question.haystack_session_ids,
-        question.haystack_sessions,
-    ))
-    dates = question.haystack_dates or []
-    qdate = (question.question_date or "").strip()
-    count = 0
-    if qdate:
-        store.store(
-            f"This question is being asked on {qdate}.",
-            category="factual", importance=0.6,
-        )
-        count += 1
-    for i, (session_id, session_msgs) in enumerate(sessions):
-        is_answer = session_id in answer_session_ids
-        date_str = (dates[i] if i < len(dates) else "").strip()
-        if date_str:
-            store.store(
-                f"This conversation session took place on {date_str}.",
-                category="factual", importance=0.7,
-            )
-            count += 1
-        for msg in session_msgs:
-            role = msg.get("role", "user")
-            content = msg.get("content", "").strip()
-            if not content:
-                continue
-            if is_answer:
-                importance = 0.8 if role == "user" else 0.6
-            else:
-                importance = 0.5 if role == "user" else 0.3
-            needs_date = bool(date_str and _RELATIVE_TIME_TURN_RE.search(content))
-            stored = f"{content} (on {date_str})" if needs_date else content
-            store.store(stored, category="factual", importance=importance)
-            count += 1
-        if i < len(sessions) - 1:
-            store.simulate_time(1)
-    return count
+from tests.eval_slice.dated_ingestion import ingest_longmemeval_with_dates  # noqa: E402
 
 
 def main() -> int:
@@ -116,7 +63,7 @@ def main() -> int:
     for i, q in enumerate(questions):
         store = MnemoriaBenchmarkAdapter(**backend_kwargs)
         store.reset()
-        _ingest_longmemeval_with_dates(store, q)
+        ingest_longmemeval_with_dates(store, q)
         r = evaluate_question(store, q, judge, top_k=10)
 
         if r.correct:

@@ -28,16 +28,10 @@ FAIRNESS_ROOT = Path(os.environ.get(
 if str(FAIRNESS_ROOT) not in sys.path:
     sys.path.insert(0, str(FAIRNESS_ROOT))
 
-# Reuse the slice's ingestion so the experiment matches. Loaded by file path
-# because tests/eval_slice isn't a package (no __init__.py exposed at install).
-import importlib.util  # noqa: E402
-
-_slice_path = REPO / "tests" / "eval_slice" / "run_slice.py"
-_spec = importlib.util.spec_from_file_location("eval_slice_run", _slice_path)
-_slice_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_slice_mod)
-_ingest_locomo_with_dates = _slice_mod._ingest_locomo_with_dates
-_load_session_dates_by_conversation = _slice_mod._load_session_dates_by_conversation
+from tests.eval_slice.dated_ingestion import (  # noqa: E402
+    ingest_locomo_with_dates,
+    load_session_dates_by_conversation,
+)
 
 
 def main() -> int:
@@ -56,7 +50,7 @@ def main() -> int:
     questions = load_locomo_dataset(sample=args.sample)
     print(f"Loaded {len(questions)} questions")
 
-    date_map = _load_session_dates_by_conversation()
+    date_map = load_session_dates_by_conversation()
     judge = HeuristicJudge()
 
     backend_kwargs = {"profile": args.profile, "embedding_model": args.embedding}
@@ -69,7 +63,7 @@ def main() -> int:
     for i, q in enumerate(questions):
         store = MnemoriaBenchmarkAdapter(**backend_kwargs)
         store.reset()
-        _ingest_locomo_with_dates(store, q, date_map.get(q.conversation_id, []))
+        ingest_locomo_with_dates(store, q, date_map.get(q.conversation_id, []))
         r = evaluate_question(store, q, judge, top_k=10)
 
         if r.correct:
