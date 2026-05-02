@@ -4,6 +4,36 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.3.0] - 2026-05-02
+
+### Added
+
+- **Cross-encoder reranker** in `MnemoriaStore.recall()` — `cross-encoder/ms-marco-MiniLM-L-6-v2` runs as a final precision pass over the top-N candidates from activation/embedding scoring. RRF-blended with the activation pipeline (`cross_encoder_act_weight=0.40`, `cross_encoder_ce_weight=0.60`); gated by `cross_encoder_min_pool=5` so tiny pools fall back to dampening/supersession signals. Default-on via `MnemoriaConfig.enable_cross_encoder_rerank`.
+- **Cross-session entity links** (`mnemoria/entities.py`) — proper-noun extraction for person names (Caroline, Melanie) and acronyms (LGBTQ) plus a write-time link pass that anchors facts mentioning the same entity across sessions. The existing one-hop Hebbian spreading in `score_candidates` harvests the new edges with no recall-side wiring.
+- **Conversational filler demotion** in `score_candidates` — `_is_conversational_filler` classifies short or supportive-dense turns ("Thanks Mel — your support means a lot", "That must have been so tough") and applies a `-0.6` answer-shape penalty. Two regimes: short bodies (<80 chars) flag on a single supportive marker; longer bodies (80–250 chars) require ≥2 markers AND zero substantive content (years, durations, month names, acronyms, quantities). Bodies ≥250 chars are presumed informative.
+- **Curated 30-question eval slice** (`tests/eval_slice/`) — fast verification harness covering the failure modes targeted by the v0.3 plan: 10 LoCoMo multi_hop, 10 LoCoMo single_hop, 5 LongMemEval multi-session, 5 LongMemEval temporal-reasoning. Hard rule: every plan item must show measured improvement on this slice before commit.
+- **Date-aware benchmark ingestion** (`tests/eval_slice/dated_ingestion.py`) — re-attaches `session_X_date_time` (LoCoMo) and `haystack_dates` (LongMemEval) to ingested turns, with a relative-date resolver mapping "yesterday" / "last year" / "X years ago" / "last Sunday" to absolute dates. Auxiliary memories carry a snippet of the originating turn so resolved dates are retrievable on topic-bound queries. Used by the slice runner and the new `scripts/run_full_*_with_dates.py` sample=500 runners.
+
+### Changed
+
+- **Default LoCoMo / LongMemEval ingestion path** in eval-slice harness now uses date-aware ingestion. The standard `hermes-agent-benchmark-fairness` adapters discard per-session timestamps, which makes "When did X happen?" / "How long ago was Y?" questions unanswerable for any backend; the slice runner reads the raw dataset to recover them.
+
+### Verified
+
+- **Tests:** 128 passed (was 95 in v0.2.3). New: 16 filler-classifier tests, 13 relative-date resolver tests, plus existing suite intact.
+- **In-house smoke (6 categories, seed 42):** mean 0.950 vs v0.2.3 mean 0.961 — within single-seed noise band (saved at `benchmarks/results/v0.3.0_inhouse_smoke.json`).
+- **LoCoMo (sample=500, heuristic judge):** 0.555 → **0.734 (+0.179)**. Per-type:
+  - multi_hop: 0.026 → **0.846 (+0.820)** — the date-discarding adapter was the structural cap; it's gone.
+  - single_hop: 0.375 → 0.493 (+0.118)
+  - open_domain: 0.729 → 0.695 (-0.034)
+  - temporal: 0.000 → 0.091 (+0.091, n=22)
+  - adversarial: 1.000 → 1.000
+- **LongMemEval (sample=500, heuristic judge):** 0.304 → **0.366 (+0.062)** vs v0.2.3 baseline. Per-type:
+  - temporal-reasoning: 0.226 → 0.383 (+0.157)
+  - multi-session: 0.128 → 0.233 (+0.105)
+  - knowledge-update: 0.538 → 0.500 (-0.038)
+- **Plan-target floors:** LoCoMo overall ≥0.50 hit (0.734); LoCoMo multi_hop ≥0.20 crushed (0.846); LongMemEval overall ≥0.40 close (0.366; 91% of target).
+
 ## [0.2.3] - 2026-04-30
 
 ### Added

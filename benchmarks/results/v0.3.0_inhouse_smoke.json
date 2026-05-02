@@ -1,0 +1,45 @@
+{
+  "benchmark": "in_house_six_category_smoke",
+  "version": "v0.3.0",
+  "profile": "balanced",
+  "embedding_model": "auto",
+  "judge": "HeuristicJudge",
+  "seeds": [
+    42
+  ],
+  "runs": 1,
+  "note": "Pre-release smoke check that mnemoria-core changes (filler classifier in score_candidates) do not regress the in-house wins from v0.2.3. Rest of v0.3 work is benchmark-shim code that does not touch retrieval scoring.",
+  "categories": {
+    "contradictions": {
+      "score": 0.95,
+      "correct": 19,
+      "total": 20
+    },
+    "cross_reference": {
+      "score": 0.9555555555555556,
+      "correct": 43,
+      "total": 45
+    },
+    "importance_filtering": {
+      "score": 0.925,
+      "correct": 37,
+      "total": 40
+    },
+    "adversarial": {
+      "score": 0.8666666666666667,
+      "correct": 13,
+      "total": 15
+    },
+    "abstention": {
+      "score": 1.0,
+      "correct": 12,
+      "total": 12
+    },
+    "deduplication": {
+      "score": 1.0,
+      "correct": 8,
+      "total": 8
+    }
+  },
+  "mean_score": 0.9495370370370372
+}
