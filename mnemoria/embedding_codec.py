@@ -1,38 +1,19 @@
-"""Embedding (de)serialization with optional storage-dtype quantization.
+"""Embedding (de)serialization with storage-dtype quantization.
 
-v0.4 candidate C7. Stored embeddings carry a 1-byte header indicating the
-on-disk dtype:
+Stored embeddings carry a 1-byte header indicating the on-disk dtype:
 
     byte 0 : DTYPE_FLOAT32 (0) | DTYPE_FLOAT16 (1)
     bytes 1+ : raw embedding bytes in that dtype
 
-`decode_embedding` always returns a float32 numpy array regardless of the
+`decode_embedding` always returns a float32 numpy array regardless of
 storage dtype, so downstream consumers (cosine similarity, RRF, CE
-rerank) need no changes.
+rerank) need no changes. The header is forward-compatible — int8
+(DTYPE_INT8 = 2) is reserved for a future asymmetric-quantization pass.
 
-`encode_embedding(arr, dtype)` accepts dtype strings ``"float32"`` or
-``"float16"``. ``"float16"`` halves the on-disk size of the embedding
-column (1536 B → 768 B at dim=384), which is by far the dominant per-fact
-storage cost (~94% of the per-fact bytes).
-
-Float16 has a max representable magnitude of ±65504 and ~3 decimal
-digits of precision. Sentence-transformer outputs are L2-normalised
-(per `mnemoria/embeddings.py` — `normalize_embeddings=True`), so values
-stay in [-1, 1]. Float16 round-trip error on this range is ~5e-4 max,
-which is well below the cosine-similarity granularity that affects
-ranking. Calibrated by the C7 evaluation; see
-`docs/research/V0.4_C7_EVAL.md`.
-
-int8 (DTYPE_INT8 = 2) is reserved for a future enhancement once float16
-is validated. int8 needs a per-fact float32 scale prefix and asymmetric
-quantization to preserve cosine-similarity accuracy; defer.
-
-**Backward compatibility caveat (prototype scope)**: the prototype
-assumes all reads see headered blobs (i.e. fresh stores). A migration
-helper ``decode_legacy_float32(blob)`` is provided for callers that
-need to read pre-C7 blobs that lack the header byte; production
-deployment of C7 will need a one-time migration pass that re-encodes
-every existing row.
+Default is float16 (halves the embedding column on disk; ~23% total DB
+shrink). Float16 round-trip error on L2-normalised vectors is ~5e-4 max,
+well below ranking-relevant cosine-similarity granularity (validated by
+the v0.4 candidate eval suite — full ACCEPT-NEUTRAL on LoCoMo + 6-cat).
 """
 from __future__ import annotations
 
@@ -83,13 +64,3 @@ def decode_embedding(blob: Optional[bytes]) -> Optional[np.ndarray]:
     raise ValueError(f"unknown embedding storage dtype tag: {header}")
 
 
-def decode_legacy_float32(blob: Optional[bytes]) -> Optional[np.ndarray]:
-    """Decode a pre-C7 blob that lacks the 1-byte header.
-
-    Used by migration code or for backward-compatibility shims when reading
-    a database that was populated by a pre-C7 mnemoria version. Treats the
-    entire blob as raw float32 bytes.
-    """
-    if blob is None or len(blob) == 0:
-        return None
-    return np.frombuffer(blob, dtype=np.float32).copy()

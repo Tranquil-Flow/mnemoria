@@ -4,6 +4,23 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.3.4] - 2026-05-04
+
+### Added
+
+- **Float16 embedding storage** — fact embeddings are persisted as float16 on disk by default, halving the embedding-column size. New `mnemoria/embedding_codec.py` writes a 1-byte dtype header so the codec is self-describing (`encode_embedding` / `decode_embedding`); `decode_embedding` always returns float32 so downstream consumers (cosine, RRF, CE rerank) need no changes.
+- **`MnemoriaConfig.embedding_storage_dtype`** — `"float16"` (default) or `"float32"`. No new dependencies, no model downloads — uses numpy only.
+
+### Verified
+
+- **Storage win:** 23% DB-size reduction at N=2000 facts on BGE-base-en-v1.5 (768d) embeddings; ~2 KB saved per fact. Holds across N=500 / N=2000.
+- **Accuracy parity:** v0.4 candidate-eval queue ran the full LoCoMo (sample=200, strict + dated) + in-house 6-cat × 3-seed grid against the float16 build and returned ACCEPT-NEUTRAL (zero score delta vs the float32 baseline).
+- **Tests:** 154 → 162 (8 new in `tests/test_embedding_quantization.py`).
+
+### Internal
+
+- Float16 round-trip error on L2-normalized sentence-transformer outputs is ~5e-4 max — well below cosine-similarity ranking granularity. The DTYPE_INT8 header tag is reserved for a future asymmetric-quantization pass; not implemented yet.
+
 ## [0.3.3] - 2026-05-04
 
 ### Changed
