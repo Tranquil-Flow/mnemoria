@@ -34,6 +34,7 @@ from mnemoria.types import (
 )
 from mnemoria.config import MnemoriaConfig
 from mnemoria.schema import get_connection
+from mnemoria.embedding_codec import encode_embedding, decode_embedding
 from mnemoria.promoter import run_promotion_pass
 from mnemoria import links as link_ops
 from mnemoria.links import cosine_similarity
@@ -294,7 +295,7 @@ class MnemoriaStore:
         )
 
         # Store embedding as BLOB
-        embedding_blob = embedding.tobytes() if embedding is not None else None
+        embedding_blob = encode_embedding(embedding, self._config.embedding_storage_dtype)
 
         # INSERT the fact
         self._conn.execute(
@@ -729,7 +730,7 @@ class MnemoriaStore:
             ).fetchall()
             best_id, best_sim = None, -1.0
             for r in rows:
-                sim = cosine_similarity(emb, np.frombuffer(r["embedding"], dtype=np.float32))
+                sim = cosine_similarity(emb, decode_embedding(r["embedding"]))
                 if sim > best_sim:
                     best_sim = sim
                     best_id = r["id"]

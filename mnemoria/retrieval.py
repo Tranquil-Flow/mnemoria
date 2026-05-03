@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 import numpy as np
 
 from mnemoria.types import MemoryFact, ScoredFact, FactType, METABOLIC_RATES
+from mnemoria.embedding_codec import decode_embedding
 from mnemoria.config import MnemoriaConfig
 from mnemoria.links import cosine_similarity, build_link_map_and_embeddings
 
@@ -375,7 +376,7 @@ def score_candidates(
         # Get embedding from cache or decode from row
         fact_embedding = embedding_cache.get(c["id"])
         if fact_embedding is None and c.get("embedding"):
-            fact_embedding = np.frombuffer(c["embedding"], dtype=np.float32)
+            fact_embedding = decode_embedding(c["embedding"])
             embedding_cache[c["id"]] = fact_embedding
 
         # 1. Base level: ACT-R ln(Σ tᵢ^(-d * metabolic_rate))
@@ -1159,7 +1160,7 @@ def check_contradictions(
     rows = conn.execute(query, params).fetchall()
 
     for r in rows:
-        existing_emb = np.frombuffer(r["embedding"], dtype=np.float32)
+        existing_emb = decode_embedding(r["embedding"])
         emb_sim = cosine_similarity(new_embedding, existing_emb)
         score = _contradiction_score(new_content, r["content"], emb_sim)
 

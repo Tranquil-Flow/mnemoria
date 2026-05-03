@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 import numpy as np
 
 from mnemoria.types import MemoryFact, MemoryLink
+from mnemoria.embedding_codec import decode_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ def build_link_map_and_embeddings(
         ).fetchall()
         for r in rows:
             if r["embedding"]:
-                embedding_cache[r["id"]] = np.frombuffer(r["embedding"], dtype=np.float32)
+                embedding_cache[r["id"]] = decode_embedding(r["embedding"])
 
     return link_map, embedding_cache
 
@@ -149,7 +150,7 @@ def create_semantic_links(
 
     candidates = []
     for r in rows:
-        emb = np.frombuffer(r["embedding"], dtype=np.float32)
+        emb = decode_embedding(r["embedding"])
         sim = cosine_similarity(fact_embedding, emb)
         candidates.append((r["id"], sim))
 

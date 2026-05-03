@@ -19,6 +19,7 @@ import math
 from typing import List, Optional, Tuple, Dict
 
 from mnemoria.types import FactType
+from mnemoria.embedding_codec import decode_embedding
 
 
 # ─── Fact Extraction ──────────────────────────────────────────
@@ -199,7 +200,7 @@ def find_near_duplicates(
     content_words = set(content.lower().split())
 
     for r in rows:
-        existing_emb = np.frombuffer(r["embedding"], dtype=np.float32)
+        existing_emb = decode_embedding(r["embedding"])
         sim = cosine_similarity(embedding, existing_emb)
 
         if sim >= threshold:
