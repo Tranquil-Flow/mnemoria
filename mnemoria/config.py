@@ -73,8 +73,18 @@ class MnemoriaConfig:
     temporal_link_strength: float = 0.28
     """Base strength for temporal adjacency links."""
 
-    temporal_link_max_recent: int = 4
-    """How many recent memories to link to when storing a new fact."""
+    # v0.4 candidate C4: widened temporal window. The existing
+    # create_temporal_links already builds the time-ordered graph C4
+    # proposed; the only gap was its narrow 4-fact horizon. With 8 the
+    # window covers most "session" scopes (LoCoMo sessions are ~20-30
+    # turns) without bloating the link table on production stores.
+    # Default in this experiment branch only — v0.4 ship would tune
+    # this per workload.
+    temporal_link_max_recent: int = 8
+    """How many recent memories to link to when storing a new fact.
+    v0.4 candidate C4 raises this from 4 to 8 to widen the temporal
+    graph horizon. Hebbian one-hop spreading at recall time then
+    propagates activation across more session-adjacent facts."""
 
     enable_entity_links: bool = True
     """Create cross-session links between facts mentioning the same proper-noun
