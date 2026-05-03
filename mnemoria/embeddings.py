@@ -272,10 +272,12 @@ class EmbeddingProvider:
         sim = provider.similarity(vec_a, vec_b)
     """
 
-    def __init__(self, model: str = "auto"):
+    def __init__(self, model: str = "auto", st_model_name: Optional[str] = None):
         self._backend = None
         self._backend_name = "none"
         self._model_config = model
+        # v0.4 candidate C9: optional explicit sentence-transformers model name
+        self._st_model_name = st_model_name
 
         if model == "auto":
             self._try_fallback_chain()
@@ -303,9 +305,12 @@ class EmbeddingProvider:
         self._init_tfidf()
 
     def _try_sentence_transformers(self) -> None:
-        self._backend = SentenceTransformerEmbedder()
+        # v0.4 candidate C9: respect the model name from config if provided
+        # (set on this branch to BAAI/bge-base-en-v1.5).
+        model_name = getattr(self, "_st_model_name", None) or "all-MiniLM-L6-v2"
+        self._backend = SentenceTransformerEmbedder(model_name=model_name)
         self._backend_name = "sentence-transformers"
-        logger.info("Using sentence-transformers embeddings")
+        logger.info(f"Using sentence-transformers embeddings: {model_name}")
 
     def _init_tfidf(self) -> None:
         self._backend = TfidfEmbedder()

@@ -129,6 +129,18 @@ class MnemoriaConfig:
     embedding_model: str = "auto"
     """Embedding provider: 'auto', 'sentence-transformers', 'ollama', 'openai', 'tfidf'."""
 
+    # v0.4 candidate C9 — sentence-transformers model name override
+    # Default is "all-MiniLM-L6-v2" (384d, 22M params).
+    # In this experiment branch, default flipped to "BAAI/bge-base-en-v1.5"
+    # (768d, 110M params) — top-tier MTEB leaderboard model. Drop-in swap.
+    # ~5x larger model → slower inference, larger DB blobs, but typically
+    # +5-10pp on retrieval benchmarks.
+    sentence_transformers_model: str = "BAAI/bge-base-en-v1.5"
+    """Override the sentence-transformers model name. v0.4 candidate C9
+    upgrades from `all-MiniLM-L6-v2` (384d) to `BAAI/bge-base-en-v1.5`
+    (768d) — proven leaderboard model with stronger semantic
+    discrimination on conversational + factual data."""
+
     db_path: str = ""
     """Path to SQLite database. Empty = default (~/.hermes/mnemoria.db)."""
 

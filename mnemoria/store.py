@@ -135,7 +135,10 @@ class MnemoriaStore:
         if not self._embedder_initialized:
             try:
                 from mnemoria.embeddings import EmbeddingProvider
-                self._embedder = EmbeddingProvider(model=self._config.embedding_model)
+                self._embedder = EmbeddingProvider(
+                    model=self._config.embedding_model,
+                    st_model_name=getattr(self._config, "sentence_transformers_model", None),
+                )
             except ImportError:
                 logger.warning("EmbeddingProvider not available — semantic search disabled")
                 self._embedder = None
