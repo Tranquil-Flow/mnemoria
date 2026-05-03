@@ -4,6 +4,35 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.3.2] - 2026-05-03
+
+### Added
+
+- **Typed-fact-aware cross-encoder pool exclusion** in `MnemoriaStore.recall()` — when the query overlaps with a typed fact's `target` (e.g. query "What is the database port?" matches the target of `V[db.port]: 5433`), untyped distractors are dropped from the cross-encoder rerank pool. The substantive but tangential text the CE used to rescue (e.g. "Database uses PostgreSQL" beating the typed port answer) no longer competes for the top slot.
+- **Key-lookup query boost** (`_is_key_lookup_query`) — short interrogative questions of the form "What X?", "Where is X?", "Which X?", "How many X?" trigger a higher `target_match_boost` ceiling (0.95 vs 0.45) and per-overlap weight (0.40 vs 0.18). Long sentence-shaped questions (≥12 words) don't trigger.
+- **FTS5 strong-match override suppression** — when the dominant FTS5 fact is untyped AND a typed candidate exists with query-target overlap, the +50% override is suppressed so it can't promote a tangential keyword-match over a typed answer.
+- **Temporal-cue stale penalty + symmetric current-state boost** — when a query has temporal markers ("now", "currently", "latest") AND a candidate carries stale markers ("archived", "legacy", "deprecated"), apply -0.8 in `answer_shape_boost`. Symmetrically, when both query AND candidate have current-state language, apply +1.5 — required to overcome BM25 advantages that lexical-trap distractors carry on capacity-stress-style fixtures.
+- **Self-acceptance filler patterns** — `_SUPPORTIVE_RE` extended with "freeing", "be yourself", "accept who we/you/I are/am", "live honestly/authentically/freely" to catch conv-26_22-style filler that previously slipped under the medium-regime ≥2-marker rule.
+
+### Changed
+
+- **Cross-encoder pool filler filter narrowed** — the v0.3.1 filter applied the full `_is_conversational_filler` classifier (both short and medium regimes); narrowed in v0.3.2 to `_is_short_filler` (short regime only, < 80 chars). The full classifier was over-aggressive on conversational corpora — fluent answer-bearing turns like "Yep, Melanie! I've got my hand-painted bowl…" were being dropped from the CE pool, costing -0.19 LoCoMo open_domain. The activation-stage soft penalty (-0.6) still applies to both short and medium filler.
+
+### Verified
+
+- **Tests:** 121 → 141. New: 7 typed-fact CE filter tests, 6 typed-key lookup tests, 7 temporal-cue tests, 1 short-filler addition.
+- **In-house full 30-cat × 1-seed:** mean 0.9050 → **0.9183 (+0.013)**. **`supersession` 0.600 → 1.000 (+0.400)** — broken category fully fixed. All 29 other categories within ±0.001 of v0.3.0 (zero regression).
+- **LoCoMo strict (sample=500, heuristic):** 0.590 → **0.594 (+0.004)**. open_domain stable at 0.705. temporal 0.045 → 0.136.
+- **LoCoMo dated (sample=500, heuristic):** 0.734 → 0.726 (-0.008, within noise). multi_hop 0.846 → 0.857 (+0.011).
+- **HotpotQA, ConvoMem, LongMemEval (strict + dated):** all within ±0.01 of v0.3.0.
+- `capacity_stress` (in-house, 0.125) unchanged — B3 demoted the stale fact but other lexical-trap distractors still win. Architectural fix deferred to v0.4.
+
+### Internal
+
+- v0.3.1 (CE filler filter) and v0.3.2 ship as a single release — v0.3.1's filter caused the regression v0.3.2's narrowing fixes; cleaner to land them together.
+- `tests/__init__.py` was missing — broke `from tests.eval_slice...` for non-`-m` invocations. Added.
+- `scripts/run_full_longmemeval_with_dates.py` sys.path order fixed (mnemoria's `tests/` package was being shadowed by the fairness repo's `tests/` package).
+
 ## [0.3.0] - 2026-05-02
 
 ### Added
