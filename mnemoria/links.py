@@ -256,34 +256,49 @@ def create_entity_links(
     }
     seen_targets.update(existing_targets)
 
+    # v0.4 candidate C5: when an entity has multiple words (e.g.
+    # "Caroline Smith"), also try matching the first token alone
+    # ("Caroline"). Stored facts that mention only the short form would
+    # otherwise miss the link — this closes that alias gap (mem0-style
+    # entity dedup, lite). The first token must be ≥4 chars to avoid
+    # over-linking on common short words ("John" is fine; "I" or "Co" are not).
+    lookup_terms_per_entity: List[List[str]] = []
     for entity in entities:
-        # Skip very short entities — too noisy for substring match.
         if len(entity) < 3:
             continue
-        rows = conn.execute(
-            """
-            SELECT id, created_at FROM um_facts
-            WHERE id != ?
-              AND status IN ('active', 'cold')
-              AND content LIKE ? COLLATE NOCASE
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (fact_id, f"%{entity}%", max_recent_per_entity),
-        ).fetchall()
+        terms = [entity]
+        if " " in entity:
+            first = entity.split()[0]
+            if len(first) >= 4 and first not in {e for e in entities}:
+                terms.append(first)
+        lookup_terms_per_entity.append(terms)
 
-        for r in rows:
-            target_id = r["id"]
-            if target_id in seen_targets:
-                continue
-            age_seconds = max(now - (r["created_at"] or now), 0.0)
-            age_days = age_seconds / seconds_per_day
-            strength = base_strength * math.exp(-age_days / half_life_days)
-            if strength < min_strength:
-                continue
-            _upsert_link(conn, fact_id, target_id, strength, now, "entity")
-            seen_targets.add(target_id)
-            created += 1
+    for terms in lookup_terms_per_entity:
+        for term in terms:
+            rows = conn.execute(
+                """
+                SELECT id, created_at FROM um_facts
+                WHERE id != ?
+                  AND status IN ('active', 'cold')
+                  AND content LIKE ? COLLATE NOCASE
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (fact_id, f"%{term}%", max_recent_per_entity),
+            ).fetchall()
+
+            for r in rows:
+                target_id = r["id"]
+                if target_id in seen_targets:
+                    continue
+                age_seconds = max(now - (r["created_at"] or now), 0.0)
+                age_days = age_seconds / seconds_per_day
+                strength = base_strength * math.exp(-age_days / half_life_days)
+                if strength < min_strength:
+                    continue
+                _upsert_link(conn, fact_id, target_id, strength, now, "entity")
+                seen_targets.add(target_id)
+                created += 1
 
     return created
 
