@@ -4,6 +4,16 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.3.3] - 2026-05-04
+
+### Changed
+
+- **Default sentence-transformers model upgraded** from `all-MiniLM-L6-v2` (384d, 22M params) to **`BAAI/bge-base-en-v1.5`** (768d, 110M params). Top-tier MTEB leaderboard model. Drop-in swap exposed via the new `MnemoriaConfig.sentence_transformers_model` field — set it back to `"all-MiniLM-L6-v2"` to keep the prior model. Validated against v0.3.2 baseline (sample=200) on the v0.4 candidate eval harness; eval-slice locomo.single_hop +0.10, locomo.overall +0.05, in-house 6-cat × 3 seeds all within ±0.000.
+
+### Migration note
+
+- The new model produces 768-dim embeddings rather than 384-dim. Existing databases with persisted embeddings will need to be re-encoded (delete the embedding column / drop the DB / pin `sentence_transformers_model = "all-MiniLM-L6-v2"`). Mnemoria does not yet auto-detect dimension mismatch.
+
 ## [0.3.2] - 2026-05-03
 
 ### Added
