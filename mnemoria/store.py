@@ -41,6 +41,8 @@ from mnemoria.retrieval import (
     score_candidates, fts5_search, apply_rrf_fusion,
     apply_qvalue_reranking, apply_dampening, apply_ips_debiasing,
     check_contradictions, _get_access_times,
+    _is_conversational_filler, _is_short_filler,
+    filter_pool_for_typed_match, _is_untyped_general,
 )
 
 logger = logging.getLogger(__name__)
@@ -533,6 +535,15 @@ class MnemoriaStore:
             # Strong-match override: if FTS5 has exactly one dominant match
             # (score >> others), ensure it's ranked first. This handles cases
             # like typed facts where target encodes semantic identity.
+            #
+            # v0.3.2: when the dominant FTS5 fact is UNTYPED (`general` target,
+            # default VALUE type) AND a typed fact in the pool has query-target
+            # overlap, suppress the override. Otherwise the override actively
+            # boosts untyped distractors that share lexical surface with the
+            # query, defeating the typed-fact recall path. (See ss_e02:
+            # "Database uses PostgreSQL" was being given a +50% override for
+            # the query "What port is the database on?" while the typed
+            # V[db.port]: 5433 sat below it.)
             sorted_fts5 = sorted(fts5_scores.items(), key=lambda x: x[1], reverse=True)
             if sorted_fts5 and sorted_fts5[0][1] > 0.3:
                 top_fts5_id = sorted_fts5[0][0]
@@ -542,6 +553,19 @@ class MnemoriaStore:
                     # Find this fact in scored and boost it above current top
                     for item in scored:
                         if item.fact.id == top_fts5_id:
+                            top_is_untyped = _is_untyped_general(item.fact)
+                            typed_competitors = (
+                                filter_pool_for_typed_match(scored, query)
+                                if top_is_untyped else scored
+                            )
+                            # filter_pool_for_typed_match returns the same list
+                            # if there's no typed match, so length comparison
+                            # tells us if any typed candidate competes.
+                            if top_is_untyped and len(typed_competitors) < len(scored):
+                                # A typed candidate matches the query target.
+                                # Suppress the override.
+                                item.components['fts5_strong_match_suppressed'] = sorted_fts5[0][1]
+                                break
                             current_max = max(s.score for s in scored)
                             item.score = current_max + abs(current_max) * 0.5 + 0.1
                             item.components['fts5_strong_match'] = sorted_fts5[0][1]
@@ -577,6 +601,37 @@ class MnemoriaStore:
         ):
             pool_size = self._config.cross_encoder_pool
             pool = scored[:pool_size]
+            # Filler turns were already penalised in score_candidates; keep
+            # SHORT pure filler out of the cross-encoder pool so raw passage
+            # relevance cannot rescue it. (MS-MARCO MiniLM scores tone-matched
+            # filler like "Absolutely! I'm so glad…" highly, which restores
+            # its rank via RRF fusion below.)
+            #
+            # v0.3.2: narrowed from `_is_conversational_filler` to
+            # `_is_short_filler` (< 80 chars). The full classifier was too
+            # aggressive on conversational corpora — fluent answer-bearing
+            # turns like "Yep, Melanie! I've got my hand-painted bowl…" were
+            # being dropped from the CE pool, costing -0.19 LoCoMo open_domain
+            # / -0.07 single_hop. The activation-stage soft penalty (-0.6 in
+            # score_candidates) still applies to both short and medium filler.
+            clean_pool = [s for s in pool if not _is_short_filler(s.fact.content)]
+            if len(clean_pool) >= self._config.cross_encoder_min_pool:
+                pool = clean_pool
+            # Typed-fact-aware filter: when the query mentions a typed fact's
+            # target (e.g. query "What is the database port?" + typed fact
+            # V[db.port]: 5433), drop untyped distractors from the CE pool
+            # so substantive-but-tangential text can't beat the typed answer
+            # via raw passage relevance. (See ss_h02 supersession failure.)
+            # Note: unlike the filler filter, this filter intentionally
+            # bypasses the cross_encoder_min_pool gate. The min_pool guard
+            # exists to avoid CE-quality degradation on tiny pools, but when
+            # the typed fact IS the authoritative answer, ranking just the
+            # typed candidates (often 1-3) is exactly what we want. The
+            # filter only activates when at least one typed candidate has
+            # query-target overlap (a strong precision signal).
+            typed_pool = filter_pool_for_typed_match(pool, query)
+            if len(typed_pool) < len(pool) and typed_pool:
+                pool = typed_pool
             ce_scores = reranker.score(query, [s.fact.content for s in pool])
             if ce_scores and any(s != 0.0 for s in ce_scores):
                 # RRF fusion of activation rank and cross-encoder rank

@@ -80,13 +80,20 @@ dmypy.json
 TASKS.md
 HANDOVER.md
 WAVE5_BLOCKER.md
+HANDOFF*.md
+STATUS*.md
+IMPROVEMENT_PLAN*.md
+BLOCKERS.md
 docs/HANDOVER_*
 docs/ISSUE_*
 docs/WEAK_SPOTS.md
+docs/research/V*_DIAGNOSIS.md
+docs/research/V*_MEASUREMENT.md
 docs/superpowers/
 debug_*.py
 verify_*.py
 .venv-*/
+.claude/
 
 # Eval slice — baseline + per-shipped-change snapshots are committed; the
 # always-overwritten latest.json and per-attempt failure runs stay local.

@@ -106,6 +106,14 @@ _SUPPORTIVE_RE = re.compile(
     r"appreciate|grateful|"
     r"inspir(e|ed|ing|ation)|amazing|incredible|wonderful|awesome|"
     r"brave|courage(ous)?|encouragement|"
+    # NOTE: kept the blanket support(ive|s)? pattern despite the v0.3.2
+    # regression hunt — narrowing it (B4 in V0.3.2_DIAGNOSIS.md) broke
+    # LoCoMo strict -9.2pp because conversational turns containing
+    # casual "support" (e.g. "good support system") were no longer
+    # getting the -0.6 filler penalty and leaked into top-K. The
+    # "free tier supports 1000 requests" false-positive is documented
+    # as a pre-existing minor issue; a safer fix would require tighter
+    # context analysis than a regex narrowing can provide.
     r"support(ive|s)?|kindness|caring|love(d|ly)?|sweet|"
     r"tough|hard|"
     r"yeah|yep|yup|nope|exactly|absolutely|totally|definitely|"
@@ -121,7 +129,14 @@ _SUPPORTIVE_RE = re.compile(
     r"that\s+must\s+(have\s+been|be)|"
     r"keep\s+(it\s+up|going)|way\s+to\s+go|good\s+luck|"
     r"way\s+to\s+go|congrats|congratulations|"
-    r"believe\s+in|proud\s+of|happy\s+for"
+    r"believe\s+in|proud\s+of|happy\s+for|"
+    # Self-acceptance filler — covers "It's so freeing to just be yourself"
+    # and "We can really accept who we are" patterns. Narrow phrases on
+    # purpose; broader matches like \bcontent\b risk false-positives on
+    # substantive uses (e.g. "media content", "request content").
+    r"(so\s+)?freeing|be\s+(yourself|your\s+self|our\s+true\s+selves?)|"
+    r"accept\s+(who|what)\s+(you|we|i)\s+(are|am)|"
+    r"live\s+(honestly|authentically|freely)"
     r")\b",
     re.IGNORECASE,
 )
@@ -157,6 +172,155 @@ def _is_conversational_filler(text: str) -> bool:
     # "Thanks, Mel — your support means a lot" while still allowing
     # opinionated content like "I really enjoyed the hike — it was fun."
     return supportive_hits >= 2
+
+
+_KEY_LOOKUP_PREFIX_RE = re.compile(
+    r"^\s*(what|which|where|how\s+much|how\s+many)\b",
+    re.IGNORECASE,
+)
+
+# Temporal-cue parsing: when the query asks for the *current* state of
+# something AND a candidate is flagged as stale (archived/legacy/deprecated/
+# old/historical/previous), apply a penalty so the candidate doesn't beat
+# the recent-but-different-vocab answer. (See capacity_stress cs_02
+# "stale lexical trap" failure.)
+_TEMPORAL_CUE_RE = re.compile(
+    r"\b(now|currently|current|latest|today|recent(ly)?|"
+    r"as\s+of\s+now|right\s+now|these\s+days|nowadays)\b",
+    re.IGNORECASE,
+)
+_STALE_MARKER_RE = re.compile(
+    r"\b(archived|legacy|deprecated|previously|"
+    r"was\s+previously|no\s+longer|historical(ly)?|"
+    r"old(\s+version)?|former(ly)?|"
+    r"used\s+to\s+(be|have|run|use)|"
+    r"in\s+the\s+(past|archived\s+\w+)|"
+    r"(retired|sunset|sunsetted)|"
+    r"(prior|old)\s+(deployment|guide|version|config|setup))\b",
+    re.IGNORECASE,
+)
+
+
+def _query_wants_current(query: str) -> bool:
+    """True if the query has language indicating the user wants the *current*
+    state (e.g. "now", "currently", "latest"). The stale-marker penalty only
+    applies when this is True.
+    """
+    if not query:
+        return False
+    return bool(_TEMPORAL_CUE_RE.search(query))
+
+
+def _candidate_is_stale_flagged(content: str) -> bool:
+    """True if the candidate text contains a marker indicating it describes
+    historical / archived / deprecated state. Used in conjunction with
+    `_query_wants_current` to penalize stale candidates on currency queries.
+    """
+    if not content:
+        return False
+    return bool(_STALE_MARKER_RE.search(content))
+
+
+def _is_key_lookup_query(query: str) -> bool:
+    """A "key-lookup" query is a short factual question of the form
+    "What X?", "Which X?", "Where is X?", "How many X?". When such a query
+    is asked AND there's a typed fact whose target overlaps with X, we want
+    to boost the typed fact's target-match score more aggressively because
+    we're confident the user is asking about a specific key.
+
+    Heuristic: starts with what/which/where/how much/how many AND ends with
+    "?" AND has fewer than 12 words. Long sentence-shaped questions (most
+    LoCoMo open-domain) don't trip this — they're usually about narrative
+    content, not key-value lookups.
+    """
+    if not query:
+        return False
+    q = query.strip()
+    if not q.endswith("?"):
+        return False
+    if len(q.split()) >= 12:
+        return False
+    return bool(_KEY_LOOKUP_PREFIX_RE.match(q))
+
+
+def _is_short_filler(text: str) -> bool:
+    """Stricter filler check used for CE pool exclusion (v0.3.2): only flag
+    SHORT pure filler (< 80 chars after speaker prefix) where the classifier
+    has high confidence (≥1 supportive marker, no substantive content).
+
+    The full `_is_conversational_filler` is too aggressive on conversational
+    corpora — it flags medium-regime turns (80-250 chars) like "Yep, Melanie!
+    I've got my hand-painted bowl from a friend…" as filler because they have
+    ≥2 supportive markers and no `_SUBSTANTIVE_INSENSITIVE_RE` matches, but
+    those turns often carry the answer-bearing content. Short pure filler
+    (< 80 chars) is much more reliably noise — the CE pool exclusion is
+    safe at that threshold.
+
+    Used only for the CE-pool filter in `Store.recall()`. The activation-
+    stage `_is_conversational_filler` penalty is unchanged — it still
+    catches both regimes, just with a soft -0.6 penalty rather than hard
+    pool exclusion.
+    """
+    if not text or not text.strip():
+        return False
+    body = _SPEAKER_PREFIX_RE.sub("", text).strip()
+    if not body or len(body) >= 80:
+        return False
+    if _has_substantive_content(body):
+        return False
+    return bool(_SUPPORTIVE_RE.search(body))
+
+
+def _is_untyped_general(fact: MemoryFact) -> bool:
+    """A fact is "untyped general" if it has the default VALUE type AND the
+    default 'general' target — i.e. it was stored as plain text without the
+    ``X[target]: content`` notation. Typed facts (Constraint / Decision /
+    Value with a specific target / Done / Obsolete) are NOT untyped general.
+    """
+    return fact.fact_type == FactType.VALUE and (
+        not fact.target or fact.target == "general"
+    )
+
+
+def filter_pool_for_typed_match(
+    pool: List[ScoredFact], query: str
+) -> List[ScoredFact]:
+    """If the query terms overlap with the ``target`` of any typed candidate
+    in the pool, return only the typed candidates (drop untyped distractors).
+    Otherwise return the pool unchanged.
+
+    Intent: when a user asks "What X?" and a typed fact ``D[…X…]: value``
+    exists, untyped distractors that mention X tangentially should not
+    compete in cross-encoder rerank — the typed fact is the authoritative
+    answer for that key. (See ss_h02 supersession failure: gold
+    ``D[frontend.framework]: React 18 with Next.js`` was beaten by untyped
+    distractor ``"TypeScript is required"``.)
+
+    The filter is conservative: only fires when at least one typed candidate
+    has explicit query-term overlap on its target. With no overlap it's a
+    no-op so untyped corpora (e.g. LoCoMo conversation turns) are unaffected.
+
+    Returns the original pool if the filter would not improve precision.
+    """
+    if not pool or not query:
+        return pool
+    query_terms = _normalize_terms(query)
+    if not query_terms:
+        return pool
+
+    has_typed_match = False
+    for s in pool:
+        if _is_untyped_general(s.fact):
+            continue
+        target_terms = _normalize_terms(s.fact.target or "")
+        if query_terms & target_terms:
+            has_typed_match = True
+            break
+
+    if not has_typed_match:
+        return pool
+
+    return [s for s in pool if not _is_untyped_general(s.fact)]
 
 
 def _normalize_terms(text: str) -> Set[str]:
@@ -267,7 +431,11 @@ def score_candidates(
         query_lower = query.lower().strip()
         text_lower = text.lower().strip()
 
-        # Explicit typed-target match helps parsed MEMORY_SPEC facts beat generic distractors
+        # Explicit typed-target match helps parsed MEMORY_SPEC facts beat generic distractors.
+        # When the query is a key-lookup shape ("What X?" / "Where is X?" / etc.) we bump
+        # the boost ceiling and per-overlap weight so the typed fact reliably beats untyped
+        # distractors with strong semantic overlap (see ss_e02 supersession failure: gold
+        # V[db.port]: 5433 was losing to "Database uses PostgreSQL" on activation alone).
         target_match_boost = 0.0
         target_terms = _normalize_terms(c.get("target") or "")
         if query_terms and target_terms:
@@ -278,7 +446,10 @@ def score_candidates(
                         overlap += 1
                         break
             if overlap:
-                target_match_boost = min(0.45, 0.18 * overlap)
+                if _is_key_lookup_query(query):
+                    target_match_boost = min(0.95, 0.40 * overlap)
+                else:
+                    target_match_boost = min(0.45, 0.18 * overlap)
 
         # Prefer factual result sentences over imperative task prompts
         if re.match(r'^(review|analyze|investigate|inspect|summarize|audit|compare|check)\b', text_lower):
@@ -311,6 +482,27 @@ def score_candidates(
         # Demote them so fact-bearing turns win the top-K.
         if _is_conversational_filler(text):
             answer_shape_boost -= 0.6
+
+        # Stale-content penalty: when the query asks for the *current* state
+        # ("now", "current", "latest") AND the candidate carries a stale
+        # marker ("archived", "legacy", "deprecated", "old version"…), apply
+        # a strong negative so the recent-but-different-vocab answer can
+        # surface above the stale-but-lexically-strong one. (See
+        # capacity_stress cs_02 "stale lexical trap" failure.)
+        if _query_wants_current(query):
+            if _candidate_is_stale_flagged(text):
+                answer_shape_boost -= 0.8
+            # Symmetric: candidates that ALSO carry current-state language
+            # ("Current production…", "today", "now bound to") get a strong
+            # boost so they can beat lexically-similar distractors that lack
+            # the temporal-cue signal. Without this, demoting the stale fact
+            # just promotes another distractor with strong BM25 overlap. The
+            # boost size (+1.5) needs to overcome BM25 advantages of ~3-5
+            # points that lexical-trap distractors carry — see capacity_stress
+            # cs_02 where "metrics server port" with BM25=8.50 was beating
+            # "Current production listener" with BM25=5.05.
+            elif _query_wants_current(text):
+                answer_shape_boost += 1.5
 
         components = {
             "base_level": base_level,

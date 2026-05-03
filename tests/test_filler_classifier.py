@@ -107,3 +107,43 @@ def test_very_long_not_filler():
     # >250 chars is presumed informative — never filler.
     text = "Thanks " * 60  # ~420 chars of pure "Thanks Thanks Thanks ..."
     assert not _is_conversational_filler(text)
+
+
+# ── v0.3.1: self-acceptance filler patterns ──────────────────────────────
+
+
+def test_self_acceptance_filler_flagged():
+    # The conv-26_22 / conv-26_105 LoCoMo failure case — under the medium
+    # regime, "yeah" alone hit only 1 supportive marker; the additional
+    # self-acceptance patterns (freeing, be yourself, accept who we are)
+    # push it to ≥2 so the body is correctly classified as filler.
+    assert _is_conversational_filler(
+        "Caroline: Yeah, that's true! It's so freeing to just be yourself "
+        "and live honestly. We can really accept who we are and be content."
+    )
+
+
+def test_self_acceptance_short_variants():
+    # Each new pattern fires on its own in short bodies (≥1 marker rule).
+    assert _is_conversational_filler("Just be yourself, you know?")
+    assert _is_conversational_filler("It's so freeing!")
+    assert _is_conversational_filler("Yeah, accept who you are.")
+    assert _is_conversational_filler("Live authentically, friend.")
+
+
+def test_self_acceptance_does_not_overflag_substantive():
+    # 'yourself' in substantive technical contexts must still pass.
+    assert not _is_conversational_filler(
+        "You can configure the system yourself by editing config.json "
+        "and restarting the service on Friday."
+    )
+    # 'free yourself' as a substantive directive (legacy migration).
+    assert not _is_conversational_filler(
+        "Free yourself from the legacy authentication system by migrating "
+        "to OAuth 2.0 before Q3 2026."
+    )
+    # Personal-narrative content with 'yourself' but rich substantive content.
+    assert not _is_conversational_filler(
+        "I made this painting in March 2023 to show my path as a trans "
+        "woman; the colors mean smashing the binary gender system."
+    )

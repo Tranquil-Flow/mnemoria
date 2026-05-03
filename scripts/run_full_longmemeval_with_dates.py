@@ -23,13 +23,16 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
-sys.path.insert(0, str(REPO))
 
 FAIRNESS_ROOT = Path(os.environ.get(
     "FAIRNESS_ROOT", str(Path.home() / "Projects/hermes-agent-benchmark-fairness")
 ))
 if str(FAIRNESS_ROOT) not in sys.path:
     sys.path.insert(0, str(FAIRNESS_ROOT))
+# REPO must be inserted AFTER FAIRNESS_ROOT so mnemoria's tests/__init__.py
+# wins resolution of the `tests.eval_slice` import — the fairness repo also
+# has a regular `tests/` package which would otherwise shadow ours.
+sys.path.insert(0, str(REPO))
 
 from tests.eval_slice.dated_ingestion import ingest_longmemeval_with_dates  # noqa: E402
 
