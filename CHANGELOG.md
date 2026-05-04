@@ -4,6 +4,21 @@ All notable changes to Mnemoria will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.3.5] - 2026-05-04
+
+### Added
+
+- **Entity alias fallback in `create_entity_links`** (v0.4 candidate C5, mem0-inspired) — when a fact's extracted entity is multi-word (e.g. `Caroline Smith`), an additional lookup runs against the first token (`Caroline`) so stored facts that only mention the short form get linked. First token must be ≥4 characters to avoid over-linking on short fragments (`St`, `Co`, etc.). Backward compatible — single-word entities behave identically.
+
+### Changed
+
+- **`MnemoriaConfig.temporal_link_max_recent` default 4 → 8** (v0.4 candidate C4) — widens the temporal-graph horizon at ingest time so Hebbian one-hop spreading at recall propagates activation across more session-adjacent facts. The narrow 4-fact window was the only gap between mnemoria's existing `create_temporal_links` and the Zep-style temporal knowledge graph that C4 proposed.
+
+### Verified
+
+- **Accuracy:** both candidates returned ACCEPT-NEUTRAL on the v0.4 candidate-eval harness (LoCoMo sample=200 strict + dated, in-house 6-cat × 3-seed) — zero score delta vs the v0.3.4 baseline. Adoption is justified by code-clarity (C5) and the broader temporal context window (C4) rather than benchmark lift.
+- **Tests:** 162 → 165 (3 new in `tests/test_entity_alias_dedup.py`).
+
 ## [0.3.4] - 2026-05-04
 
 ### Added
